@@ -41,6 +41,19 @@ export async function activate(context: vscode.ExtensionContext) {
   proxy.reapOrphans();
   render();
 
+  // Last-ditch cleanup: VS Code may cut off async deactivate() on shutdown, so
+  // also kill the proxy synchronously when the extension-host process exits.
+  const onHostExit = () => {
+    try {
+      clearClaudeEnv();
+      proxy?.stop();
+    } catch {
+      /* best-effort */
+    }
+  };
+  process.once("exit", onHostExit);
+  context.subscriptions.push({ dispose: () => process.removeListener("exit", onHostExit) });
+
   context.subscriptions.push(
     vscode.commands.registerCommand("paritok.setApiKey", () => setApiKey()),
     vscode.commands.registerCommand("paritok.enable", () => enableMenu()),
@@ -69,8 +82,11 @@ export async function activate(context: vscode.ExtensionContext) {
 }
 
 export async function deactivate() {
-  // Best-effort: restore every config-wired agent and kill the proxy. (Claude
-  // Code is terminal-based — nothing persisted, nothing to restore.)
+  // Kill the proxy FIRST (synchronous), before any awaited work — VS Code gives
+  // shutdown a short budget, and an await here could get cut off before the kill
+  // runs, orphaning the process. Restoring the config-wired agents is secondary.
+  clearClaudeEnv();
+  proxy?.stop();
   for (const id of enabledIds()) {
     try {
       await agentById(id)?.disable();
@@ -78,8 +94,6 @@ export async function deactivate() {
       /* ignore */
     }
   }
-  clearClaudeEnv();
-  proxy?.stop();
 }
 
 // ─────────────────────────────── state helpers ─────────────────────────────

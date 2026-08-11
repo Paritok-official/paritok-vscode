@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.10
+
+- **Harden proxy shutdown further.** `deactivate()` now kills the proxy *first*, before any awaited config-restore work, so a short shutdown budget can't cut off the kill and orphan the process. Also registers a synchronous `process.on("exit")` cleanup as a last-ditch backstop when VS Code cuts `deactivate()` short. (Combined with 0.1.9's synchronous kill + activation-time reaping.)
+
 ## 0.1.9
 
 - **Fix: orphaned `paritok up` left listening after VS Code closes.** On Windows the shutdown kill was fired asynchronously (`spawn` taskkill) from `deactivate()`, but the extension host is torn down before that async kill finishes — orphaning the python grandchild, which kept holding the port (and got silently reused on the next launch). The kill is now **synchronous** (`spawnSync`), so the whole tree is dead before `deactivate()` returns.
