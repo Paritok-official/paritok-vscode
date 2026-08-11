@@ -164,8 +164,8 @@ async function currentCodexOptions(): Promise<CodexOptions | undefined> {
   if (!enabledIds().includes("codex")) {
     return undefined;
   }
-  const model =
-    vscode.workspace.getConfiguration("paritok").get<string>("codexModel", "gpt-5") || "gpt-5";
+  // Empty by default → Codex picks the model (its picker / -m flag / default).
+  const model = vscode.workspace.getConfiguration("paritok").get<string>("codexModel", "");
   // Always requires_openai_auth: Codex carries its own login (subscription or
   // key) and paritok routes by token type — no key stored in the extension.
   return { model, subscription: true, apiKey: "" };

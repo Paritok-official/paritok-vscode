@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.18
+
+- **Don't force a Codex model.** `paritok.codexModel` now defaults to empty, and the generated config omits the `model =` line — so Codex uses its own model selection (its picker, `-m/--model`, or default). A hardcoded `gpt-5` was rejected by ChatGPT-account Codex ("model not supported"). Set `paritok.codexModel` only if you want to pin one. (Needs paritok ≥ 1.3.4.)
+
 ## 0.1.17
 
 - **Codex enable is now as simple as Claude Code — no auth prompt.** Codex already lets you sign in (ChatGPT subscription or API key) in its own panel / via `codex login`, so the extension no longer asks. It always writes `requires_openai_auth`, and the proxy routes by token type (OAuth → ChatGPT backend, `sk-` key → OpenAI). Enable Codex now also offers **Reload Window** (a new Codex session is needed to pick up the config, same as Claude Code). To embed a raw API key instead, use a self-managed config (`paritok.configFile`).

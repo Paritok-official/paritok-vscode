@@ -33,14 +33,14 @@ export function scaffoldFullConfig(filePath: string, apiKey: string, codex?: Cod
     ? [
         "codex:",
         "  enabled: true",
-        `  model: "${q(codex.model)}"`,
+        ...(codex.model ? [`  model: "${q(codex.model)}"`] : []),
         `  subscription: ${codex.subscription ? "true" : "false"}`,
         `  api_key: "${q(codex.apiKey)}"`,
       ]
     : [
         "codex:",
         "  enabled: false          # true → paritok writes ~/.codex/config.toml so Codex routes here",
-        "  model: gpt-5",
+        '  model: ""               # optional — empty lets Codex choose (picker / -m flag / default)',
         "  subscription: true      # default: ChatGPT login (run `codex login`). false → use api_key",
         '  api_key: ""             # only used when subscription: false (empty → env OPENAI_API_KEY)',
       ];
@@ -206,10 +206,11 @@ export async function writeProxyConfig(
 
   // Codex routing: paritok writes ~/.codex/config.toml when codex.enabled is true.
   if (opts.codex) {
+    lines.push("codex:", "  enabled: true");
+    if (opts.codex.model) {
+      lines.push(`  model: "${q(opts.codex.model)}"`);
+    }
     lines.push(
-      "codex:",
-      "  enabled: true",
-      `  model: "${q(opts.codex.model)}"`,
       `  subscription: ${opts.codex.subscription ? "true" : "false"}`,
       `  api_key: "${q(opts.codex.apiKey)}"`
     );
