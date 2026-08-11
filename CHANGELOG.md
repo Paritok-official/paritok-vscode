@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.12
+
+- **Reload Window now reliably re-routes Claude Code.** The routing env var is set on the *very first line* of activation (from stored state + config, fully synchronous) — before the output channel, the proxy, anything — so the native Claude Code extension inherits it whenever it spawns, winning the reload race. "Reload Window" is back as the one-click path after enabling (starting a new session still works too).
+- Command renamed `Paritok: Enable Claude Code` (dropped the parenthetical).
+
 ## 0.1.11
 
 - **Fix Claude Code routing UX.** An already-running Claude Code session keeps the endpoint it was spawned with, so enabling won't switch it — you must start a **new** session. The success message now says exactly that and no longer suggests "Reload Window" (reloading races the native extension's restart and often respawns the session before our env is set — which is why a reload appeared to "not work" but a fresh window did).
