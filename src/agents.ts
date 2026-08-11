@@ -160,11 +160,11 @@ const codex: Agent = {
     // subscription or API key, via the Codex panel / `codex login`) and paritok
     // relays it — routing an sk- key to OpenAI and an OAuth token to ChatGPT.
     const model = vscode.workspace.getConfiguration("paritok").get<string>("codexModel", "");
-    return { model, subscription: true, apiKey: "" };
+    return { model };
   },
 
   async enable(_ctx: EnableCtx, collected: any): Promise<void> {
-    codex.codexOptions = { model: collected.model, apiKey: "", subscription: true };
+    codex.codexOptions = { model: collected.model };
   },
 
   async disable(): Promise<void> {

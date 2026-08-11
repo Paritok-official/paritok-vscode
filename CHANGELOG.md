@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.19
+
+- **Slimmer Codex config.** The generated paritok.yaml codex block is now just `enabled: true` (plus `model` only if you pinned one via `paritok.codexModel`). No `subscription`/`api_key` — Codex uses its own login (subscription or key via `codex login`) and paritok relays it, exactly like Claude Code. The full "Create editable config" template drops those lines too. (Needs paritok ≥ 1.3.4, which defaults Codex auth to `requires_openai_auth`.)
+
 ## 0.1.18
 
 - **Don't force a Codex model.** `paritok.codexModel` now defaults to empty, and the generated config omits the `model =` line — so Codex uses its own model selection (its picker, `-m/--model`, or default). A hardcoded `gpt-5` was rejected by ChatGPT-account Codex ("model not supported"). Set `paritok.codexModel` only if you want to pin one. (Needs paritok ≥ 1.3.4.)

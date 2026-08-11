@@ -165,10 +165,9 @@ async function currentCodexOptions(): Promise<CodexOptions | undefined> {
     return undefined;
   }
   // Empty by default → Codex picks the model (its picker / -m flag / default).
+  // No auth here: Codex uses its own login and paritok routes by token type.
   const model = vscode.workspace.getConfiguration("paritok").get<string>("codexModel", "");
-  // Always requires_openai_auth: Codex carries its own login (subscription or
-  // key) and paritok routes by token type — no key stored in the extension.
-  return { model, subscription: true, apiKey: "" };
+  return { model };
 }
 
 /**

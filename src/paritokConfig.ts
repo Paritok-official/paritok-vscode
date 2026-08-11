@@ -34,15 +34,12 @@ export function scaffoldFullConfig(filePath: string, apiKey: string, codex?: Cod
         "codex:",
         "  enabled: true",
         ...(codex.model ? [`  model: "${q(codex.model)}"`] : []),
-        `  subscription: ${codex.subscription ? "true" : "false"}`,
-        `  api_key: "${q(codex.apiKey)}"`,
       ]
     : [
         "codex:",
-        "  enabled: false          # true → paritok writes ~/.codex/config.toml so Codex routes here",
-        '  model: ""               # optional — empty lets Codex choose (picker / -m flag / default)',
-        "  subscription: true      # default: ChatGPT login (run `codex login`). false → use api_key",
-        '  api_key: ""             # only used when subscription: false (empty → env OPENAI_API_KEY)',
+        "  enabled: false          # true → route Codex here (writes ~/.codex/config.toml).",
+        "                          # Codex uses your own login (subscription or key via `codex login`),",
+        "                          # like Claude Code. Add `model: <id>` only to pin one.",
       ];
   const lines = [
     "# Paritok config — edit freely. Because paritok.configFile points here, the",
@@ -98,11 +95,8 @@ export function scaffoldFullConfig(filePath: string, apiKey: string, codex?: Cod
 }
 
 export interface CodexOptions {
+  /** Optional model id to pin in ~/.codex/config.toml; empty → Codex chooses. */
   model: string;
-  /** true → ChatGPT subscription (requires_openai_auth, no key). false → use apiKey. */
-  subscription: boolean;
-  /** OpenAI key (only when subscription is false); "" → env OPENAI_API_KEY. */
-  apiKey: string;
 }
 
 export interface ProxyConfigOptions {
@@ -206,14 +200,12 @@ export async function writeProxyConfig(
 
   // Codex routing: paritok writes ~/.codex/config.toml when codex.enabled is true.
   if (opts.codex) {
+    // Just enable it — Codex uses its own login and paritok routes by token type;
+    // no key/subscription needed (paritok defaults codex auth to requires_openai_auth).
     lines.push("codex:", "  enabled: true");
     if (opts.codex.model) {
       lines.push(`  model: "${q(opts.codex.model)}"`);
     }
-    lines.push(
-      `  subscription: ${opts.codex.subscription ? "true" : "false"}`,
-      `  api_key: "${q(opts.codex.apiKey)}"`
-    );
   } else {
     lines.push("codex:", "  enabled: false");
   }
