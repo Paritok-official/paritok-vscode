@@ -1,4 +1,4 @@
-import { spawn, ChildProcess, SpawnOptions } from "child_process";
+import { spawn, spawnSync, ChildProcess, SpawnOptions } from "child_process";
 
 /**
  * Cross-platform process helpers.
@@ -38,19 +38,58 @@ export function runCheck(cmd: string, args: string[]): Promise<boolean> {
 }
 
 /**
- * Kill a spawned process and its children. On Windows a shell-launched process
- * tree (cmd.exe → python) is not fully killed by proc.kill(), so use taskkill /T.
+ * Kill a spawned process and its children. On Windows a shell-launched tree
+ * (cmd.exe → paritok.cmd → python) is not fully killed by proc.kill(), so use
+ * taskkill /T. IMPORTANT: this is SYNCHRONOUS (spawnSync). We used to fire an
+ * async taskkill, but when this runs from deactivate() on VS Code close, the
+ * extension host is torn down before the async taskkill finishes — leaving the
+ * python grandchild orphaned and still listening on the port. Blocking here
+ * guarantees the tree is dead before deactivate() returns.
  */
 export function killTree(child: ChildProcess): void {
   if (!child.pid) {
     return;
   }
   if (isWin) {
-    // /T kills the whole tree, /F forces it. Best-effort; ignore failures.
-    spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
-      stdio: "ignore",
-    }).on("error", () => {});
+    try {
+      spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
+        stdio: "ignore",
+        windowsHide: true,
+      });
+    } catch {
+      /* best-effort */
+    }
   } else {
-    child.kill();
+    try {
+      child.kill();
+    } catch {
+      /* best-effort */
+    }
+  }
+}
+
+/**
+ * Synchronously kill any process whose command line contains `fragment`.
+ * Used to reap orphaned proxies the extension spawned in a previous session
+ * (their `--config-file` path contains our globalStorage folder name), which a
+ * crash or abrupt close can leave behind. Matching on the config path means we
+ * never touch a `paritok up` the user started themselves in a terminal.
+ */
+export function killByCommandLine(fragment: string): void {
+  try {
+    if (isWin) {
+      const ps =
+        "Get-CimInstance Win32_Process | " +
+        `Where-Object { $_.CommandLine -like '*${fragment}*' } | ` +
+        "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }";
+      spawnSync("powershell", ["-NoProfile", "-NonInteractive", "-Command", ps], {
+        stdio: "ignore",
+        windowsHide: true,
+      });
+    } else {
+      spawnSync("pkill", ["-f", fragment], { stdio: "ignore" });
+    }
+  } catch {
+    /* best-effort */
   }
 }

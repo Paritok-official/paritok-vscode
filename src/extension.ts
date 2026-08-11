@@ -36,6 +36,9 @@ export async function activate(context: vscode.ExtensionContext) {
       "[healed a leftover ANTHROPIC_BASE_URL in ~/.claude/settings.json from an older version]"
     );
   }
+  // Reap any proxy this extension orphaned in a previous session (e.g. left
+  // listening after an abrupt VS Code close). Only kills OUR config's process.
+  proxy.reapOrphans();
   render();
 
   context.subscriptions.push(

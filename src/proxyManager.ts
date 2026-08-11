@@ -1,7 +1,13 @@
 import * as vscode from "vscode";
 import { ChildProcess } from "child_process";
 import * as http from "http";
-import { spawnCmd, runCheck, killTree } from "./proc";
+import { spawnCmd, runCheck, killTree, killByCommandLine } from "./proc";
+
+// Every proxy the extension spawns is passed a --config-file inside this
+// globalStorage folder, so its command line uniquely contains this string.
+// We reap by matching it, which never touches a `paritok up` the user ran
+// themselves (that uses a different config path).
+const REAP_FRAGMENT = "paritok.paritok-vscode";
 
 /**
  * Owns the lifetime of the local `paritok up` process.
@@ -172,5 +178,18 @@ export class ProxyManager {
       killTree(this.proc);
       this.proc = null;
     }
+    // Sweep any orphan we (or a previous session) spawned but didn't track —
+    // matches only OUR config path, so a user-run `paritok up` is left alone.
+    killByCommandLine(REAP_FRAGMENT);
+  }
+
+  /**
+   * Kill leftover proxies the extension spawned in a previous session (e.g. one
+   * orphaned by an abrupt VS Code close). Call at activation, before anything
+   * else, to guarantee no zombie survives a restart. Never touches a proxy the
+   * user started themselves.
+   */
+  reapOrphans(): void {
+    killByCommandLine(REAP_FRAGMENT);
   }
 }

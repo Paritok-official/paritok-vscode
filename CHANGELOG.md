@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.9
+
+- **Fix: orphaned `paritok up` left listening after VS Code closes.** On Windows the shutdown kill was fired asynchronously (`spawn` taskkill) from `deactivate()`, but the extension host is torn down before that async kill finishes — orphaning the python grandchild, which kept holding the port (and got silently reused on the next launch). The kill is now **synchronous** (`spawnSync`), so the whole tree is dead before `deactivate()` returns.
+- **Reap orphans on activation.** As a backstop for crashes/force-quits (where `deactivate` never runs), the extension now kills any leftover proxy it spawned in a previous session at startup. It matches only processes launched with *our* globalStorage config path, so a `paritok up` you started yourself in a terminal is never touched.
+
 ## 0.1.8
 
 - **Claude Code keeps its native panel.** 0.1.7 routed via a separate terminal (basically the CLI). Now routing is done by setting `ANTHROPIC_BASE_URL` **in the extension host's `process.env`** — the native Claude Code extension spawns `claude` with `{...process.env}`, and all desktop extensions share one host process, so a new Claude Code session picks it up with **zero config files touched**. It lives only in memory: closing VS Code clears it, so it can never leave a dead pointer on disk. Start a new session (or reload the window) after enabling. Re-established automatically after a window reload while enabled.
