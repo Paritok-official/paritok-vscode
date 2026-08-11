@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.7
+
+- **Claude Code no longer touches `~/.claude/settings.json`.** The old design injected a persistent `ANTHROPIC_BASE_URL` there — which left Claude Code pointing at a dead port whenever the proxy wasn't running (after a VS Code restart/crash → "Connection refused"). Now **Paritok: Start Claude Code (routed terminal)** opens a dedicated integrated terminal that carries the endpoint in *its own process env* and runs `claude`. Close the terminal (or VS Code) and the routing is gone — zero residue, nothing to restore, impossible to leave Claude Code broken globally.
+- **Self-heal on startup.** If a previous version left an `ANTHROPIC_BASE_URL` pointing at a local proxy in `~/.claude/settings.json`, it's removed (backup restored if present) the moment the extension activates — so upgraders are fixed automatically. Only localhost URLs are touched; a user's own remote base is left alone.
+- **Per-agent commands — no more confusing multi-select.** Instead of one checklist where Enter confirmed *every* ticked agent (so ticking Claude Code also triggered Codex's key prompt), each agent now has its own command: **Start Claude Code**, **Enable Codex**, **Enable Continue**. `Paritok: Enable` is now a single-pick menu that dispatches to one of them.
+
+> Note: for Claude Code's context meter to read correctly while routed, the paritok proxy needs a `/v1/messages/count_tokens` passthrough (tracked separately). Without it Claude Code can't measure remaining context and may compact early.
+
 ## 0.1.6
 
 - **Fix: cancelling one agent no longer aborts the whole Enable.** Skipping (e.g. dismissing Codex's key prompt) now skips only that agent; the others — including Claude Code — still get wired.

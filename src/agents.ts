@@ -60,86 +60,79 @@ export type AgentId = "claude-code" | "codex" | "continue";
 const BAK = ".paritok-bak";
 
 // ─────────────────────────────── Claude Code ───────────────────────────────
-// Subscription-friendly: no API key. We set env.ANTHROPIC_BASE_URL in
-// ~/.claude/settings.json, which both the CLI and the VS Code extension read.
+// Subscription-friendly: no API key. We do NOT touch any config file. Instead
+// we open a dedicated VS Code integrated terminal whose process env carries
+// ANTHROPIC_BASE_URL, then run `claude` in it. The routing lives ONLY in that
+// terminal's process — close the terminal (or VS Code) and it's gone, with zero
+// residue. This makes it impossible to leave a global Claude Code pointing at a
+// dead proxy (the failure mode of the old settings.json injection).
+
+const CLAUDE_TERMINAL_NAME = "Claude Code (Paritok)";
 
 function claudeSettingsPath(): string {
   return path.join(os.homedir(), ".claude", "settings.json");
 }
 
-const claudeCode: Agent = {
-  id: "claude-code",
-  label: "Claude Code",
-  detail: "Subscription or API key — no key needed here. Edits ~/.claude/settings.json.",
-  viaProxy: false,
-  postEnableHint: "Restart your Claude Code session (or reload the window) to pick up the new endpoint.",
+/** Is Claude Code available on this machine? */
+export async function detectClaudeCode(): Promise<boolean> {
+  return (
+    fs.existsSync(path.join(os.homedir(), ".claude")) ||
+    !!vscode.extensions.getExtension("Anthropic.claude-code") ||
+    (await runCheck("claude", ["--version"]))
+  );
+}
 
-  async detect(): Promise<boolean> {
-    return (
-      fs.existsSync(path.join(os.homedir(), ".claude")) ||
-      !!vscode.extensions.getExtension("Anthropic.claude-code") ||
-      (await runCheck("claude", ["--version"]))
-    );
-  },
+/**
+ * Open (or reuse) the routed terminal and start `claude` in it. `base` is the
+ * Anthropic-style root, e.g. http://127.0.0.1:8080 (no /v1 suffix — the CLI
+ * appends the path itself).
+ */
+export function launchClaudeCode(base: string): void {
+  // Reuse an existing routed terminal if one is already open.
+  const existing = vscode.window.terminals.find((t) => t.name === CLAUDE_TERMINAL_NAME);
+  const term =
+    existing ||
+    vscode.window.createTerminal({
+      name: CLAUDE_TERMINAL_NAME,
+      env: { ANTHROPIC_BASE_URL: base },
+    });
+  term.show();
+  term.sendText("claude");
+}
 
-  isWired(): boolean {
-    const p = claudeSettingsPath();
-    if (!fs.existsSync(p)) {
-      return false;
-    }
-    try {
-      const cfg = JSON.parse(fs.readFileSync(p, "utf8"));
-      return !!cfg?.env?.ANTHROPIC_BASE_URL;
-    } catch {
-      return false;
-    }
-  },
-
-  async collect(): Promise<any> {
-    return {}; // nothing to gather — subscription needs no key
-  },
-
-  async enable(ctx: EnableCtx): Promise<void> {
-    const p = claudeSettingsPath();
-    fs.mkdirSync(path.dirname(p), { recursive: true });
-    const raw = fs.existsSync(p) ? fs.readFileSync(p, "utf8") : "{}";
-    if (fs.existsSync(p)) {
-      fs.writeFileSync(p + BAK, raw, "utf8"); // byte-for-byte backup
-    }
-    let cfg: any;
-    try {
-      cfg = JSON.parse(raw);
-    } catch (e: any) {
-      throw new Error(`Could not parse ${p}: ${e.message}`);
-    }
-    cfg.env = { ...(cfg.env || {}), ANTHROPIC_BASE_URL: ctx.baseAnthropic };
-    fs.writeFileSync(p, JSON.stringify(cfg, null, 2), "utf8");
-  },
-
-  async disable(): Promise<void> {
-    const p = claudeSettingsPath();
+/**
+ * One-time self-heal for users upgrading from the old settings.json-injection
+ * design: if ~/.claude/settings.json still points ANTHROPIC_BASE_URL at a local
+ * proxy (our doing), undo it so Claude Code is never left pointing at a dead
+ * port. Restores our byte-for-byte backup if present, else strips just the key.
+ * Only touches localhost/127.0.0.1 URLs, so a user's own remote base is safe.
+ */
+export function healLegacyClaudeInjection(): boolean {
+  const p = claudeSettingsPath();
+  try {
     if (fs.existsSync(p + BAK)) {
       fs.writeFileSync(p, fs.readFileSync(p + BAK, "utf8"), "utf8");
       fs.rmSync(p + BAK, { force: true });
-      return;
+      return true;
     }
-    // No backup (we created settings.json): just strip the key we added.
-    if (fs.existsSync(p)) {
-      try {
-        const cfg = JSON.parse(fs.readFileSync(p, "utf8"));
-        if (cfg?.env) {
-          delete cfg.env.ANTHROPIC_BASE_URL;
-          if (Object.keys(cfg.env).length === 0) {
-            delete cfg.env;
-          }
-        }
-        fs.writeFileSync(p, JSON.stringify(cfg, null, 2), "utf8");
-      } catch {
-        /* leave as-is */
+    if (!fs.existsSync(p)) {
+      return false;
+    }
+    const cfg = JSON.parse(fs.readFileSync(p, "utf8"));
+    const url: unknown = cfg?.env?.ANTHROPIC_BASE_URL;
+    if (typeof url === "string" && /127\.0\.0\.1|localhost/i.test(url)) {
+      delete cfg.env.ANTHROPIC_BASE_URL;
+      if (cfg.env && Object.keys(cfg.env).length === 0) {
+        delete cfg.env;
       }
+      fs.writeFileSync(p, JSON.stringify(cfg, null, 2), "utf8");
+      return true;
     }
-  },
-};
+  } catch {
+    /* leave as-is */
+  }
+  return false;
+}
 
 // ─────────────────────────────────── Codex ─────────────────────────────────
 // paritok writes ~/.codex/config.toml from the paritok.yaml codex: block, so
@@ -273,7 +266,10 @@ const continueAgent: Agent = {
   },
 };
 
-export const AGENTS: Agent[] = [claudeCode, codex, continueAgent];
+// Config-file-wired agents (Claude Code is handled separately via a routed
+// terminal — see launchClaudeCode). agentById() only resolves these; a stale
+// "claude-code" id from an older version resolves to undefined and is ignored.
+export const AGENTS: Agent[] = [codex, continueAgent];
 
 export function agentById(id: AgentId): Agent | undefined {
   return AGENTS.find((a) => a.id === id);

@@ -2,7 +2,7 @@
   "name": "paritok-vscode",
   "displayName": "Paritok",
   "description": "Route your VS Code AI assistant (Continue / Cline) through a local Paritok proxy to compress tool-call & file context and cut token cost.",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "publisher": "Paritok",
   "license": "MIT",
   "icon": "images/paritok-icon.png",
@@ -38,7 +38,22 @@
     "commands": [
       {
         "command": "paritok.enable",
-        "title": "Paritok: Enable (choose agents)",
+        "title": "Paritok: Enable (pick an agent)",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "paritok.enableClaudeCode",
+        "title": "Paritok: Start Claude Code (routed terminal)",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "paritok.enableCodex",
+        "title": "Paritok: Enable Codex",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "paritok.enableContinue",
+        "title": "Paritok: Enable Continue",
         "icon": "$(plug)"
       },
       {
