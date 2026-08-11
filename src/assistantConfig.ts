@@ -2,19 +2,22 @@ import * as vscode from "vscode";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import * as yaml from "js-yaml";
 
 /**
- * Wires the AI assistant (Continue's classic config.json) to route through the
- * local proxy by rewriting each OpenAI/Anthropic model's `apiBase`, preserving
- * everything else (including the user's upstream API keys — paritok forwards the
- * Authorization header unchanged to the real provider).
+ * Wires the AI assistant to route through the local proxy by rewriting each
+ * OpenAI/Anthropic model's `apiBase`, preserving everything else (including the
+ * user's upstream API keys — paritok forwards the Authorization header unchanged
+ * to the real provider).
  *
- * The ENTIRE original file is backed up next to it, so Disable Proxy Mode is a
- * byte-for-byte restore. We never touch the file if we can't parse it.
+ * Supports BOTH Continue config formats:
+ *   - config.json  (classic)
+ *   - config.yaml  (newer Continue default)
  *
- * Scope note: this handles Continue's legacy JSON config. Newer Continue uses a
- * YAML config (config.yaml) and Cline stores models in its own settings; those
- * are detected and reported, not silently edited. See README "Known limits".
+ * The ENTIRE original file is backed up byte-for-byte next to it, so Disable
+ * Proxy Mode restores the exact original — comments and formatting included.
+ * (While proxy mode is ON, a rewritten config.yaml is re-serialized and loses
+ * comments; they come back verbatim on restore. This is called out in the README.)
  */
 const BACKUP_SUFFIX = ".paritok-bak";
 
@@ -22,28 +25,59 @@ export interface WireResult {
   configPath: string;
   changed: number;
   baseUrl: string;
+  format: "json" | "yaml";
 }
 
-function defaultContinuePath(): string {
-  return path.join(os.homedir(), ".continue", "config.json");
+function continueDir(): string {
+  return path.join(os.homedir(), ".continue");
 }
 
+function isYaml(p: string): boolean {
+  return /\.ya?ml$/i.test(p);
+}
+
+/**
+ * Resolve which config file to edit.
+ *  - explicit override wins (dispatched by its extension)
+ *  - else prefer config.yaml (newer default), then config.json
+ */
 function resolveConfigPath(): string {
   const override = vscode.workspace
     .getConfiguration("paritok")
     .get<string>("assistantConfigPath", "");
-  return override && override.trim() ? override.trim() : defaultContinuePath();
+  if (override && override.trim()) {
+    return override.trim();
+  }
+  const yamlPath = path.join(continueDir(), "config.yaml");
+  const jsonPath = path.join(continueDir(), "config.json");
+  if (fs.existsSync(yamlPath)) {
+    return yamlPath;
+  }
+  return jsonPath; // default target even if absent, so errors name the classic path
 }
 
-/** True when a Continue install is present in some form (json or yaml). */
-export function detectAssistant(): { jsonExists: boolean; yamlExists: boolean; jsonPath: string } {
-  const jsonPath = resolveConfigPath();
-  const yamlPath = path.join(os.homedir(), ".continue", "config.yaml");
+export function detectAssistant(): {
+  jsonExists: boolean;
+  yamlExists: boolean;
+  target: string;
+} {
+  const jsonPath = path.join(continueDir(), "config.json");
+  const yamlPath = path.join(continueDir(), "config.yaml");
   return {
     jsonExists: fs.existsSync(jsonPath),
     yamlExists: fs.existsSync(yamlPath),
-    jsonPath,
+    target: resolveConfigPath(),
   };
+}
+
+function parse(raw: string, asYaml: boolean): any {
+  return asYaml ? yaml.load(raw) : JSON.parse(raw);
+}
+
+function serialize(cfg: any, asYaml: boolean): string {
+  return asYaml
+    ? yaml.dump(cfg, { lineWidth: 120, noRefs: true })
+    : JSON.stringify(cfg, null, 2);
 }
 
 /**
@@ -52,6 +86,9 @@ export function detectAssistant(): { jsonExists: boolean; yamlExists: boolean; j
  */
 export function wire(baseUrl: string, upstream: string): WireResult {
   const configPath = resolveConfigPath();
+  const asYaml = isYaml(configPath);
+  const format: "json" | "yaml" = asYaml ? "yaml" : "json";
+
   if (!fs.existsSync(configPath)) {
     throw new Error(
       `Continue config not found at ${configPath}. Install the Continue ` +
@@ -62,13 +99,12 @@ export function wire(baseUrl: string, upstream: string): WireResult {
   const raw = fs.readFileSync(configPath, "utf8");
   let cfg: any;
   try {
-    cfg = JSON.parse(raw);
-  } catch {
-    throw new Error(
-      `Could not parse ${configPath} as JSON. If this is a newer Continue ` +
-        `config.yaml, wire it manually (see the README) — the extension will ` +
-        `not edit YAML to avoid corrupting it.`
-    );
+    cfg = parse(raw, asYaml);
+  } catch (e: any) {
+    throw new Error(`Could not parse ${configPath} as ${format.toUpperCase()}: ${e.message}`);
+  }
+  if (!cfg || typeof cfg !== "object") {
+    throw new Error(`${configPath} did not contain a config object.`);
   }
 
   // Back up the untouched original once per enable.
@@ -87,8 +123,7 @@ export function wire(baseUrl: string, upstream: string): WireResult {
   }
 
   if (changed === 0) {
-    // Nothing matched — remove the just-written backup so Disable doesn't
-    // "restore" a no-op, and tell the caller so it can warn the user.
+    // Nothing matched — drop the backup so Disable doesn't "restore" a no-op.
     fs.rmSync(configPath + BACKUP_SUFFIX, { force: true });
     throw new Error(
       `No '${wanted}' models found in ${configPath} to redirect. Add a ` +
@@ -96,8 +131,8 @@ export function wire(baseUrl: string, upstream: string): WireResult {
     );
   }
 
-  fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2), "utf8");
-  return { configPath, changed, baseUrl };
+  fs.writeFileSync(configPath, serialize(cfg, asYaml), "utf8");
+  return { configPath, changed, baseUrl, format };
 }
 
 /** Restore the byte-for-byte backup if present. Returns true if restored. */

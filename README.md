@@ -23,7 +23,7 @@ Continue ──request──► paritok up (127.0.0.1:8080) ──compressed─�
 ## Requirements
 
 - **Python + the paritok CLI**: `pip install "paritok[proxy]"` (the extension checks and tells you if it's missing).
-- **A supported assistant that allows a custom API base URL** — currently **[Continue](https://continue.dev)** (classic `config.json`). Cline/Roo work the same way but must be wired by hand for now (see *Known limits*).
+- **A supported assistant that allows a custom API base URL** — currently **[Continue](https://continue.dev)** (both `config.json` and the newer `config.yaml`). Cline/Roo work the same way but must be wired by hand for now (see *Known limits*).
 - **A Paritok API key** — free at [paritok.com](https://paritok.com) → dashboard → API keys.
 
 ## Setup (one time)
@@ -67,7 +67,8 @@ Done. The status bar shows `🔌 paritok :8080`. Use Continue exactly as before 
 
 ## Known limits
 
-- **Continue `config.yaml` (newer format) and Cline** are *detected but not auto-edited* — the extension refuses to edit YAML rather than risk corrupting it. Wire them by hand: set the model's `apiBase` to the URL shown in the enable notification.
+- **Continue `config.yaml`** is supported. Note: while proxy mode is ON the YAML is re-serialized (comments are dropped); the exact original — comments included — is restored on **Disable Proxy Mode** from the byte-for-byte backup.
+- **Cline / Roo** store models in their own settings and are not auto-wired yet — set the model's `apiBase` to the URL shown in the enable notification by hand.
 - **Copilot / Cursor's built-in / JetBrains AI Assistant** do **not** expose a custom base URL, so they cannot be routed this way. This extension targets assistants that do.
 - Paritok compresses **native tool-call / file-read context**. Assistants that stuff file content into plain user text (not via tools) will see lower savings — same rule as the CLI.
 

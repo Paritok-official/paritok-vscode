@@ -10,6 +10,8 @@ Initial release — **Proxy Mode** (the "B1" approach).
 - Status bar indicator + `/stats` viewer + `/health` startup gating.
 - Optional `autoStart` on launch.
 
+- Supports both Continue `config.json` and the newer `config.yaml` (YAML re-serialized while active; exact original restored from backup on disable).
+
 ### Known limits
-- Continue `config.yaml` and Cline are detected but must be wired by hand.
+- Cline / Roo store models in their own settings and must be wired by hand.
 - Copilot / Cursor built-in / JetBrains AI Assistant cannot be routed (no custom base URL).
