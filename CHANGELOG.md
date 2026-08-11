@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.15
+
+- **New: `Paritok: Open Config (paritok.yaml)`.** Opens the active config so you can reach settings the UI doesn't expose — `use_gpu_server`, timeouts, `compression`, `history`, `tool_discovery`, `trace`, `shadow_storage`, and the full `codex` block.
+- **Self-managed config.** New `paritok.configFile` setting: point it at your own paritok.yaml and the extension uses it AS-IS and never overwrites it. Opening the managed config offers a one-click "Create editable config" that seeds a full, commented template and switches you to it. (The default managed config is still regenerated on each Enable — the command warns you before you edit it.)
+
 ## 0.1.14
 
 - **Codex can now use your ChatGPT subscription — no API key.** Enabling Codex asks how to authenticate: **ChatGPT subscription** (recommended; run `codex login` once, nothing to paste) or **OpenAI API key**. Subscription routing needs paritok ≥ 1.3.4 (the proxy forwards the ChatGPT OAuth token to the ChatGPT backend). Requires the matching `subscription` flag written into paritok.yaml, which this version now emits.

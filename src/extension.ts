@@ -1,6 +1,14 @@
 import * as vscode from "vscode";
+import * as fs from "fs";
+import * as path from "path";
 import { ProxyManager } from "./proxyManager";
-import { writeProxyConfig, CodexOptions } from "./paritokConfig";
+import {
+  writeProxyConfig,
+  CodexOptions,
+  managedConfigPath,
+  configFileSetting,
+  scaffoldFullConfig,
+} from "./paritokConfig";
 import { offerInstall } from "./installer";
 import {
   AGENTS,
@@ -76,7 +84,8 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("paritok.disable", () => disable()),
     vscode.commands.registerCommand("paritok.restart", () => restart()),
     vscode.commands.registerCommand("paritok.showStats", () => showStats()),
-    vscode.commands.registerCommand("paritok.installCli", () => installCli())
+    vscode.commands.registerCommand("paritok.installCli", () => installCli()),
+    vscode.commands.registerCommand("paritok.openConfig", () => openConfig())
   );
 
   // Re-establish after a window reload/restart. Claude Code is re-established
@@ -152,17 +161,32 @@ async function ensureKey(): Promise<string | undefined> {
 }
 
 // ──────────────────────────────── proxy plumbing ───────────────────────────
-/** Build paritok.yaml from current state (Codex block only if Codex is enabled). */
-async function writeConfig(key: string): Promise<string> {
-  let codex: CodexOptions | undefined;
-  if (enabledIds().includes("codex")) {
-    const model =
-      vscode.workspace.getConfiguration("paritok").get<string>("codexModel", "gpt-5") || "gpt-5";
-    const subscription = ctx.globalState.get<boolean>(STATE_CODEX_SUB, true);
-    const okey = subscription ? "" : (await ctx.secrets.get(OPENAI_KEY)) || "";
-    codex = { model, subscription, apiKey: okey };
+/** Codex options from current state, or undefined when Codex isn't enabled. */
+async function currentCodexOptions(): Promise<CodexOptions | undefined> {
+  if (!enabledIds().includes("codex")) {
+    return undefined;
   }
-  return writeProxyConfig(ctx, key, { codex });
+  const model =
+    vscode.workspace.getConfiguration("paritok").get<string>("codexModel", "gpt-5") || "gpt-5";
+  const subscription = ctx.globalState.get<boolean>(STATE_CODEX_SUB, true);
+  const okey = subscription ? "" : (await ctx.secrets.get(OPENAI_KEY)) || "";
+  return { model, subscription, apiKey: okey };
+}
+
+/**
+ * The config `paritok up` will read. When the user set paritok.configFile we use
+ * it AS-IS (seeding a full template once if missing) and never overwrite it;
+ * otherwise we (re)generate the extension-managed minimal config.
+ */
+async function writeConfig(key: string): Promise<string> {
+  const custom = configFileSetting();
+  if (custom) {
+    if (!fs.existsSync(custom)) {
+      scaffoldFullConfig(custom, key, await currentCodexOptions());
+    }
+    return custom; // user-managed — never overwrite
+  }
+  return writeProxyConfig(ctx, key, { codex: await currentCodexOptions() });
 }
 
 /** Start the proxy (reusing a healthy one), offering a pip install if missing. */
@@ -315,6 +339,23 @@ async function enableCodex() {
     if (!key) {
       return;
     }
+    // With a self-managed config the codex: block lives in the user's file, so
+    // don't prompt — just (re)start so their edits apply, and point them to it.
+    if (configFileSetting()) {
+      await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: "Paritok: restarting for Codex" },
+        async (p) => restartProxy(key, p)
+      );
+      render();
+      const open = await vscode.window.showInformationMessage(
+        "Paritok: Codex is driven by your self-managed config — edit its `codex:` block (enabled/subscription/api_key). Proxy restarted.",
+        "Open Config"
+      );
+      if (open === "Open Config") {
+        openConfig();
+      }
+      return;
+    }
     const codex = agentById("codex")!;
     if (!(await codex.detect())) {
       const go = await vscode.window.showWarningMessage(
@@ -440,6 +481,49 @@ async function installCli() {
     }
   } catch (e: any) {
     vscode.window.showErrorMessage(`Paritok: install failed — ${e.message}`);
+  }
+}
+
+// ──────────────────────────────── open config ──────────────────────────────
+async function openConfig() {
+  const custom = configFileSetting();
+  const p = custom || managedConfigPath(ctx);
+  const key = (await ctx.secrets.get(SECRET_KEY)) || "";
+
+  if (!fs.existsSync(p)) {
+    if (custom) {
+      scaffoldFullConfig(p, key, await currentCodexOptions());
+    } else if (key) {
+      await writeConfig(key); // materialize the managed config as it is today
+    } else {
+      scaffoldFullConfig(p, "", await currentCodexOptions()); // no key yet → a full starting template
+    }
+  }
+
+  const doc = await vscode.workspace.openTextDocument(p);
+  await vscode.window.showTextDocument(doc);
+
+  if (!custom) {
+    const pick = await vscode.window.showWarningMessage(
+      "This is the extension-managed config — it is rewritten every time you Enable, so edits here are lost. " +
+        "To change advanced settings (backend, timeouts, history, tool_discovery, trace…) permanently, use a self-managed config file.",
+      "Create editable config",
+      "Dismiss"
+    );
+    if (pick === "Create editable config") {
+      const target = path.join(ctx.globalStorageUri.fsPath, "paritok.user.yaml");
+      if (!fs.existsSync(target)) {
+        scaffoldFullConfig(target, key, await currentCodexOptions());
+      }
+      await vscode.workspace
+        .getConfiguration("paritok")
+        .update("configFile", target, vscode.ConfigurationTarget.Global);
+      const d = await vscode.workspace.openTextDocument(target);
+      await vscode.window.showTextDocument(d);
+      vscode.window.showInformationMessage(
+        "Paritok: now using your self-managed config (paritok.configFile). Edit it, then run Enable/Restart. It won't be overwritten."
+      );
+    }
   }
 }
 

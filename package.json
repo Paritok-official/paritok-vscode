@@ -2,7 +2,7 @@
   "name": "paritok-vscode",
   "displayName": "Paritok",
   "description": "Route your VS Code AI assistant (Continue / Cline) through a local Paritok proxy to compress tool-call & file context and cut token cost.",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "publisher": "Paritok",
   "license": "MIT",
   "icon": "images/paritok-icon.png",
@@ -80,6 +80,11 @@
         "command": "paritok.showStats",
         "title": "Paritok: Show Savings (/stats)",
         "icon": "$(graph)"
+      },
+      {
+        "command": "paritok.openConfig",
+        "title": "Paritok: Open Config (paritok.yaml)",
+        "icon": "$(settings-gear)"
       }
     ],
     "configuration": {
@@ -128,6 +133,11 @@
           "type": "string",
           "default": "",
           "description": "Override the path to the assistant's config.json (Continue: ~/.continue/config.json). Leave empty to auto-detect."
+        },
+        "paritok.configFile": {
+          "type": "string",
+          "default": "",
+          "description": "Path to a paritok.yaml you manage yourself. When set, the extension uses it AS-IS and never overwrites it, so you control every setting (use_gpu_server, timeouts, compression, history, tool_discovery, trace, codex, shadow_storage). Run 'Paritok: Open Config' to create/edit it. Leave empty to use the extension-managed minimal config."
         }
       }
     }
