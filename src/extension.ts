@@ -20,9 +20,7 @@ import {
 } from "./agents";
 
 const SECRET_KEY = "paritok.apiKey";
-const OPENAI_KEY = "paritok.openaiKey";
 const STATE_ENABLED = "paritok.enabledAgents";
-const STATE_CODEX_SUB = "paritok.codexSubscription";
 
 let proxy: ProxyManager;
 let status: vscode.StatusBarItem;
@@ -168,9 +166,9 @@ async function currentCodexOptions(): Promise<CodexOptions | undefined> {
   }
   const model =
     vscode.workspace.getConfiguration("paritok").get<string>("codexModel", "gpt-5") || "gpt-5";
-  const subscription = ctx.globalState.get<boolean>(STATE_CODEX_SUB, true);
-  const okey = subscription ? "" : (await ctx.secrets.get(OPENAI_KEY)) || "";
-  return { model, subscription, apiKey: okey };
+  // Always requires_openai_auth: Codex carries its own login (subscription or
+  // key) and paritok routes by token type — no key stored in the extension.
+  return { model, subscription: true, apiKey: "" };
 }
 
 /**
@@ -272,7 +270,7 @@ async function enableMenu() {
     {
       label: "Codex",
       description: codexDet ? "$(check) detected" : "not detected",
-      detail: "Routes the `codex` CLI and the Codex VS Code panel via ~/.codex/config.toml (asks for an OpenAI key once).",
+      detail: "Routes the `codex` CLI and the Codex VS Code panel — uses your own Codex login (subscription or key), no prompt.",
       id: "codex" as const,
     },
     {
@@ -359,7 +357,7 @@ async function enableCodex() {
     const codex = agentById("codex")!;
     if (!(await codex.detect())) {
       const go = await vscode.window.showWarningMessage(
-        "Paritok: the Codex CLI wasn't detected. Enable anyway?",
+        "Paritok: Codex (CLI or the Codex VS Code extension) wasn't detected. Enable anyway?",
         "Enable",
         "Cancel"
       );
@@ -367,23 +365,23 @@ async function enableCodex() {
         return;
       }
     }
-    const data = await codex.collect!(ctx);
-    if (data === undefined) {
-      return; // user cancelled
-    }
+    // No auth prompt — like Claude Code, Codex uses its own login and paritok
+    // routes by token type (see currentCodexOptions).
     await addEnabled("codex");
-    await ctx.globalState.update(STATE_CODEX_SUB, !!data.subscription);
     await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title: "Paritok: enabling Codex" },
       async (p) => restartProxy(key, p)
     );
     render();
-    const loginHint = data.subscription
-      ? " Run `codex login` (ChatGPT) if you haven't, then start a new Codex session."
-      : " Start a new Codex session (terminal `codex` or the panel).";
-    vscode.window.showInformationMessage(
-      `Paritok: Codex routed (proxy on ${proxy.host}:${proxy.port}).${loginHint}`
+    const r = await vscode.window.showInformationMessage(
+      `Paritok: Codex routed (proxy on ${proxy.host}:${proxy.port}). ` +
+        `Sign into Codex (ChatGPT subscription or API key) if you haven't. ` +
+        `Reload the window or start a new Codex session to apply.`,
+      "Reload Window"
     );
+    if (r === "Reload Window") {
+      vscode.commands.executeCommand("workbench.action.reloadWindow");
+    }
   } catch (e: any) {
     render();
     vscode.window.showErrorMessage(`Paritok: ${e.message}`);

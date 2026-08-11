@@ -154,62 +154,19 @@ const codex: Agent = {
     }
   },
 
-  async collect(context: vscode.ExtensionContext): Promise<any> {
+  async collect(): Promise<any> {
+    // Like Claude Code: no auth prompt. paritok always writes
+    // requires_openai_auth, so Codex uses whatever YOU signed in with (ChatGPT
+    // subscription or API key, via the Codex panel / `codex login`) and paritok
+    // relays it — routing an sk- key to OpenAI and an OAuth token to ChatGPT.
     const model =
       vscode.workspace.getConfiguration("paritok").get<string>("codexModel", "gpt-5") ||
       "gpt-5";
-
-    // Codex now supports its ChatGPT subscription through the proxy (default),
-    // or an OpenAI API key. Let the user pick.
-    const mode = await vscode.window.showQuickPick(
-      [
-        {
-          label: "ChatGPT subscription",
-          description: "recommended — no key; run `codex login` once",
-          id: "sub" as const,
-        },
-        {
-          label: "OpenAI API key",
-          description: "use an sk-... key (or the OPENAI_API_KEY env var)",
-          id: "key" as const,
-        },
-      ],
-      { title: "Codex — how should it authenticate?", placeHolder: "Pick one" }
-    );
-    if (!mode) {
-      return undefined; // cancelled
-    }
-    if (mode.id === "sub") {
-      return { model, subscription: true, apiKey: "" };
-    }
-
-    let key = (await context.secrets.get("paritok.openaiKey")) || "";
-    if (!key) {
-      const entered = await vscode.window.showInputBox({
-        prompt: "OpenAI API key for Codex (leave empty to use the OPENAI_API_KEY env var)",
-        placeHolder: "sk-... (optional)",
-        password: true,
-        ignoreFocusOut: true,
-      });
-      if (entered === undefined) {
-        return undefined; // cancelled
-      }
-      key = entered.trim();
-      if (key) {
-        await context.secrets.store("paritok.openaiKey", key);
-      }
-    }
-    return { model, subscription: false, apiKey: key };
+    return { model, subscription: true, apiKey: "" };
   },
 
   async enable(_ctx: EnableCtx, collected: any): Promise<void> {
-    // Wiring happens when paritok starts (it writes config.toml). We only stash
-    // the options so the orchestrator folds them into paritok.yaml.
-    codex.codexOptions = {
-      model: collected.model,
-      apiKey: collected.apiKey,
-      subscription: !!collected.subscription,
-    };
+    codex.codexOptions = { model: collected.model, apiKey: "", subscription: true };
   },
 
   async disable(): Promise<void> {

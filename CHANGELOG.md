@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.17
+
+- **Codex enable is now as simple as Claude Code — no auth prompt.** Codex already lets you sign in (ChatGPT subscription or API key) in its own panel / via `codex login`, so the extension no longer asks. It always writes `requires_openai_auth`, and the proxy routes by token type (OAuth → ChatGPT backend, `sk-` key → OpenAI). Enable Codex now also offers **Reload Window** (a new Codex session is needed to pick up the config, same as Claude Code). To embed a raw API key instead, use a self-managed config (`paritok.configFile`).
+
 ## 0.1.16
 
 - **Full engine settings in VS Code.** The Settings UI now mirrors paritok.yaml: backend (`useGpuServer`, gpu_server/local_model base URLs, models, timeouts), `compression` (min/max tokens, refusal threshold), `history` (keep-recent-turns, context threshold/window), `tool_discovery` (strategy, top_k, k_max, adaptive, MCP threshold), `trace`, and `shadow_storage`. Only settings you actually change are written into the generated config — anything untouched still falls back to paritok's own defaults. (For hand-editing the raw file instead, `paritok.configFile` + Open Config still apply and take precedence.)
