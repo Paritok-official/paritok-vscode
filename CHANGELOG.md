@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.8
+
+- **Claude Code keeps its native panel.** 0.1.7 routed via a separate terminal (basically the CLI). Now routing is done by setting `ANTHROPIC_BASE_URL` **in the extension host's `process.env`** — the native Claude Code extension spawns `claude` with `{...process.env}`, and all desktop extensions share one host process, so a new Claude Code session picks it up with **zero config files touched**. It lives only in memory: closing VS Code clears it, so it can never leave a dead pointer on disk. Start a new session (or reload the window) after enabling. Re-established automatically after a window reload while enabled.
+- The one-time `~/.claude/settings.json` self-heal from 0.1.7 stays, to clean up any injection left by ≤0.1.6.
+
 ## 0.1.7
 
 - **Claude Code no longer touches `~/.claude/settings.json`.** The old design injected a persistent `ANTHROPIC_BASE_URL` there — which left Claude Code pointing at a dead port whenever the proxy wasn't running (after a VS Code restart/crash → "Connection refused"). Now **Paritok: Start Claude Code (routed terminal)** opens a dedicated integrated terminal that carries the endpoint in *its own process env* and runs `claude`. Close the terminal (or VS Code) and the routing is gone — zero residue, nothing to restore, impossible to leave Claude Code broken globally.

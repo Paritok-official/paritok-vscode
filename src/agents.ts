@@ -60,14 +60,14 @@ export type AgentId = "claude-code" | "codex" | "continue";
 const BAK = ".paritok-bak";
 
 // ─────────────────────────────── Claude Code ───────────────────────────────
-// Subscription-friendly: no API key. We do NOT touch any config file. Instead
-// we open a dedicated VS Code integrated terminal whose process env carries
-// ANTHROPIC_BASE_URL, then run `claude` in it. The routing lives ONLY in that
-// terminal's process — close the terminal (or VS Code) and it's gone, with zero
-// residue. This makes it impossible to leave a global Claude Code pointing at a
-// dead proxy (the failure mode of the old settings.json injection).
-
-const CLAUDE_TERMINAL_NAME = "Claude Code (Paritok)";
+// Subscription-friendly: no API key, and we do NOT touch any config file. The
+// native Claude Code VS Code extension spawns `claude` with env {...process.env}
+// (ANTHROPIC_BASE_URL is on its honored list), and all desktop extensions share
+// one extension-host process — so we route it by setting ANTHROPIC_BASE_URL in
+// OUR process.env (see setClaudeEnv in extension.ts). It lives only in memory:
+// VS Code exits → it's gone. It can NEVER leave a dead pointer on disk (the
+// failure mode of the old settings.json injection), and it keeps the native
+// Claude Code panel — no terminal, no config edits.
 
 function claudeSettingsPath(): string {
   return path.join(os.homedir(), ".claude", "settings.json");
@@ -80,24 +80,6 @@ export async function detectClaudeCode(): Promise<boolean> {
     !!vscode.extensions.getExtension("Anthropic.claude-code") ||
     (await runCheck("claude", ["--version"]))
   );
-}
-
-/**
- * Open (or reuse) the routed terminal and start `claude` in it. `base` is the
- * Anthropic-style root, e.g. http://127.0.0.1:8080 (no /v1 suffix — the CLI
- * appends the path itself).
- */
-export function launchClaudeCode(base: string): void {
-  // Reuse an existing routed terminal if one is already open.
-  const existing = vscode.window.terminals.find((t) => t.name === CLAUDE_TERMINAL_NAME);
-  const term =
-    existing ||
-    vscode.window.createTerminal({
-      name: CLAUDE_TERMINAL_NAME,
-      env: { ANTHROPIC_BASE_URL: base },
-    });
-  term.show();
-  term.sendText("claude");
 }
 
 /**

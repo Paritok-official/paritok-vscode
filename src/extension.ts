@@ -8,7 +8,6 @@ import {
   EnableCtx,
   agentById,
   detectClaudeCode,
-  launchClaudeCode,
   healLegacyClaudeInjection,
 } from "./agents";
 
@@ -51,9 +50,15 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("paritok.installCli", () => installCli())
   );
 
+  // Re-establish after a window reload/restart. Claude Code is re-established
+  // regardless of autoStart (its routing is in-memory, lost on every reload, and
+  // the user expects the native panel to keep working); Codex/Continue only when
+  // autoStart is on. bringUp waits on /health, so if the proxy can't come up we
+  // simply never set the env — the native panel just direct-connects, unbroken.
   const auto = vscode.workspace.getConfiguration("paritok").get<boolean>("autoStart", false);
   const key = await context.secrets.get(SECRET_KEY);
-  if (auto && key && enabledIds().length) {
+  const ids = enabledIds();
+  if (key && ids.length && (auto || ids.includes("claude-code"))) {
     bringUp(key)
       .then(() => render())
       .catch((e) => output.appendLine(`auto-start failed: ${e.message}`));
@@ -70,6 +75,7 @@ export async function deactivate() {
       /* ignore */
     }
   }
+  clearClaudeEnv();
   proxy?.stop();
 }
 
@@ -170,6 +176,16 @@ function enableCtx(): EnableCtx {
   };
 }
 
+// Claude Code routing = an in-memory env var on the shared extension host. The
+// native Claude Code extension spawns `claude` with {...process.env}, so a new
+// session picks this up. Nothing on disk → nothing to break, nothing to restore.
+function setClaudeEnv() {
+  process.env.ANTHROPIC_BASE_URL = `http://${proxy.host}:${proxy.port}`;
+}
+function clearClaudeEnv() {
+  delete process.env.ANTHROPIC_BASE_URL;
+}
+
 /** Re-apply wiring for the persisted agents (used by autoStart / restart). */
 async function bringUp(key: string, p?: vscode.Progress<{ message?: string }>) {
   await restartProxy(key, p); // re-writes ~/.codex/config.toml if Codex is enabled
@@ -178,6 +194,9 @@ async function bringUp(key: string, p?: vscode.Progress<{ message?: string }>) {
       .getConfiguration("paritok")
       .get<string>("upstream", "anthropic");
     await agentById("continue")!.enable(enableCtx(), { upstream });
+  }
+  if (enabledIds().includes("claude-code")) {
+    setClaudeEnv();
   }
 }
 
@@ -192,7 +211,7 @@ async function enableMenu() {
     {
       label: "Claude Code",
       description: ccDet ? "$(check) detected" : "not detected",
-      detail: "Subscription-friendly. Opens a routed terminal — no config files touched, nothing to undo.",
+      detail: "Subscription-friendly. Routes the native panel via an in-memory env var — no config files touched, nothing to undo.",
       id: "claude-code" as const,
     },
     {
@@ -231,17 +250,22 @@ async function enableClaudeCode() {
     if (!key) {
       return;
     }
+    await addEnabled("claude-code");
     await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title: "Paritok: starting proxy for Claude Code" },
       async (p) => ensureProxy(key, p)
     );
+    setClaudeEnv(); // only after the proxy is confirmed healthy (ensureProxy waits on /health)
     render();
-    const base = `http://${proxy.host}:${proxy.port}`;
-    launchClaudeCode(base);
-    vscode.window.showInformationMessage(
-      `Paritok: opened a routed Claude Code terminal (→ ${base}). ` +
-        `The routing lives only in that terminal — close it to stop. Nothing is written to ~/.claude.`
+    const r = await vscode.window.showInformationMessage(
+      `Paritok: Claude Code now routes through the proxy on ${proxy.host}:${proxy.port} — ` +
+        `keep using the native panel. Start a NEW Claude Code session (or reload the window) to pick it up. ` +
+        `Nothing is written to ~/.claude; it clears itself when VS Code closes.`,
+      "Reload Window"
     );
+    if (r === "Reload Window") {
+      vscode.commands.executeCommand("workbench.action.reloadWindow");
+    }
   } catch (e: any) {
     render();
     vscode.window.showErrorMessage(`Paritok: ${e.message}`);
@@ -333,6 +357,7 @@ async function disable() {
       vscode.window.showErrorMessage(`Paritok: could not restore ${id} — ${e.message}`);
     }
   }
+  clearClaudeEnv(); // Claude Code isn't in AGENTS — undo its in-memory routing here
   proxy.stop();
   await setEnabledIds([]);
   render();
