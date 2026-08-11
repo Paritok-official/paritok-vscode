@@ -2,7 +2,7 @@
   "name": "paritok-vscode",
   "displayName": "Paritok",
   "description": "Route your VS Code AI assistant (Continue / Cline) through a local Paritok proxy to compress tool-call & file context and cut token cost.",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "publisher": "Paritok",
   "license": "MIT",
   "icon": "images/paritok-icon.png",
@@ -137,7 +137,119 @@
         "paritok.configFile": {
           "type": "string",
           "default": "",
-          "description": "Path to a paritok.yaml you manage yourself. When set, the extension uses it AS-IS and never overwrites it, so you control every setting (use_gpu_server, timeouts, compression, history, tool_discovery, trace, codex, shadow_storage). Run 'Paritok: Open Config' to create/edit it. Leave empty to use the extension-managed minimal config."
+          "description": "Path to a paritok.yaml you manage yourself. When set, the extension uses it AS-IS and never overwrites it (and the paritok.* engine settings below are ignored). Run 'Paritok: Open Config' to create/edit it. Leave empty to let the extension generate the config from the settings below."
+        },
+        "paritok.useGpuServer": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Backend: `true` = Paritok GPU server (needs an API key); `false` = self-host the open model locally via Ollama (uses the `localModel*` settings)."
+        },
+        "paritok.gpuServerBaseUrl": {
+          "type": "string",
+          "default": "https://www.paritok.com/api",
+          "description": "GPU server endpoint (used when useGpuServer is true)."
+        },
+        "paritok.gpuServerModel": {
+          "type": "string",
+          "default": "paritok-4b-v1",
+          "description": "GPU server model name."
+        },
+        "paritok.gpuServerTimeout": {
+          "type": "number",
+          "default": 90,
+          "description": "GPU server request timeout (seconds)."
+        },
+        "paritok.localModelBaseUrl": {
+          "type": "string",
+          "default": "http://localhost:11434/v1",
+          "description": "Self-hosted model endpoint (used when useGpuServer is false)."
+        },
+        "paritok.localModelModel": {
+          "type": "string",
+          "default": "paritok-4b-v1",
+          "description": "Self-hosted model name (Ollama)."
+        },
+        "paritok.localModelTimeout": {
+          "type": "number",
+          "default": 300,
+          "description": "Self-hosted model request timeout (seconds)."
+        },
+        "paritok.compressionMinTokens": {
+          "type": "number",
+          "default": 512,
+          "description": "Skip compression below this many tokens."
+        },
+        "paritok.compressionMaxTokens": {
+          "type": "number",
+          "default": 50000,
+          "description": "Skip compression above this many tokens."
+        },
+        "paritok.compressionRefusalThreshold": {
+          "type": "number",
+          "default": 0.05,
+          "description": "Must save at least this fraction (0.05 = 5%) or keep the original."
+        },
+        "paritok.historyEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Compress older conversation turns."
+        },
+        "paritok.historyKeepRecentTurns": {
+          "type": "number",
+          "default": 4,
+          "description": "Keep the last N turns intact (uncompressed)."
+        },
+        "paritok.historyContextThreshold": {
+          "type": "number",
+          "default": 0.8,
+          "description": "Compress old turns once more than this fraction of the window is used."
+        },
+        "paritok.historyContextWindow": {
+          "type": "number",
+          "default": 200000,
+          "description": "Model context window (tokens) used for the history threshold."
+        },
+        "paritok.toolDiscoveryStrategy": {
+          "type": "string",
+          "enum": ["embedding", "relevance", "passthrough"],
+          "default": "embedding",
+          "description": "How to trim tool schemas: embedding (semantic), relevance (top-K), or passthrough (keep all)."
+        },
+        "paritok.toolDiscoveryTopK": {
+          "type": "number",
+          "default": 5,
+          "description": "relevance strategy: keep the top-K tool schemas, stub the rest."
+        },
+        "paritok.toolDiscoveryKMax": {
+          "type": "number",
+          "default": 8,
+          "description": "embedding strategy: max tools kept in full schema."
+        },
+        "paritok.toolDiscoveryAdaptive": {
+          "type": "boolean",
+          "default": true,
+          "description": "embedding strategy: coding tasks drop unselected MCP tools; MCP tasks stub them."
+        },
+        "paritok.toolDiscoveryMcpSignalThreshold": {
+          "type": "number",
+          "default": 1.0,
+          "description": "embedding strategy: MCP-signal threshold for adaptive apply."
+        },
+        "paritok.traceEnabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Log every original→compressed pair for debugging."
+        },
+        "paritok.tracePath": {
+          "type": "string",
+          "default": "compress_trace.jsonl",
+          "description": "File to write the compression trace to (when traceEnabled)."
+        },
+        "paritok.shadowStorage": {
+          "type": "string",
+          "enum": ["memory", "redis"],
+          "default": "memory",
+          "description": "Where [REF] shadow content lives. redis persists across restarts (needs paritok[redis])."
         }
       }
     }

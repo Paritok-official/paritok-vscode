@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.16
+
+- **Full engine settings in VS Code.** The Settings UI now mirrors paritok.yaml: backend (`useGpuServer`, gpu_server/local_model base URLs, models, timeouts), `compression` (min/max tokens, refusal threshold), `history` (keep-recent-turns, context threshold/window), `tool_discovery` (strategy, top_k, k_max, adaptive, MCP threshold), `trace`, and `shadow_storage`. Only settings you actually change are written into the generated config — anything untouched still falls back to paritok's own defaults. (For hand-editing the raw file instead, `paritok.configFile` + Open Config still apply and take precedence.)
+
 ## 0.1.15
 
 - **New: `Paritok: Open Config (paritok.yaml)`.** Opens the active config so you can reach settings the UI doesn't expose — `use_gpu_server`, timeouts, `compression`, `history`, `tool_discovery`, `trace`, `shadow_storage`, and the full `codex` block.
