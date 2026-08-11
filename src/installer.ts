@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { execFile, spawn } from "child_process";
+import { spawnCmd, runCheck } from "./proc";
 
 /**
  * Best-effort auto-install of the paritok CLI via pip.
@@ -49,22 +49,16 @@ export async function ensureContinue(): Promise<boolean> {
   return continueInstalled();
 }
 
-function tryVersion(cmd: string, args: string[]): Promise<boolean> {
-  return new Promise((resolve) => {
-    execFile(cmd, args, (err) => resolve(!err));
-  });
-}
-
 /** Return a working Python launcher, honoring paritok.pythonCommand, or null. */
 export async function findPython(): Promise<string | null> {
   const override = vscode.workspace
     .getConfiguration("paritok")
     .get<string>("pythonCommand", "");
   if (override && override.trim()) {
-    return (await tryVersion(override.trim(), ["--version"])) ? override.trim() : null;
+    return (await runCheck(override.trim(), ["--version"])) ? override.trim() : null;
   }
   for (const c of PY_CANDIDATES) {
-    if (await tryVersion(c, ["--version"])) {
+    if (await runCheck(c, ["--version"])) {
       return c;
     }
   }
@@ -80,7 +74,7 @@ export function pipInstall(python: string, out: vscode.OutputChannel): Promise<v
   out.show(true);
   out.appendLine(`$ ${python} ${args.join(" ")}`);
   return new Promise((resolve, reject) => {
-    const proc = spawn(python, args, { env: process.env, shell: false });
+    const proc = spawnCmd(python, args, { env: process.env });
     proc.stdout?.on("data", (d) => out.append(d.toString()));
     proc.stderr?.on("data", (d) => out.append(d.toString()));
     proc.on("error", (e) => reject(e));

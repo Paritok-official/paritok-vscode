@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
-import { spawn, ChildProcess, execFile } from "child_process";
+import { ChildProcess } from "child_process";
 import * as http from "http";
+import { spawnCmd, runCheck, killTree } from "./proc";
 
 /**
  * Owns the lifetime of the local `paritok up` process.
@@ -45,11 +46,9 @@ export class ProxyManager {
     return upstream === "openai" ? `${root}/v1` : root;
   }
 
-  /** True if the paritok CLI is importable/on PATH. */
+  /** True if the paritok CLI is runnable (handles Windows .cmd launchers). */
   checkInstalled(): Promise<boolean> {
-    return new Promise((resolve) => {
-      execFile(this.command, ["--version"], (err) => resolve(!err));
-    });
+    return runCheck(this.command, ["--version"]);
   }
 
   /**
@@ -79,10 +78,9 @@ export class ProxyManager {
     ];
     this.out.appendLine(`$ ${this.command} ${args.join(" ")}`);
 
-    this.proc = spawn(this.command, args, {
+    this.proc = spawnCmd(this.command, args, {
       // Inherit the environment so PARITOK_API_KEY / proxy vars still apply.
       env: process.env,
-      shell: false,
     });
     this.proc.stdout?.on("data", (d) => this.out.append(d.toString()));
     this.proc.stderr?.on("data", (d) => this.out.append(d.toString()));
@@ -148,7 +146,7 @@ export class ProxyManager {
   stop(): void {
     if (this.proc) {
       this.out.appendLine("\n[stopping paritok]");
-      this.proc.kill();
+      killTree(this.proc);
       this.proc = null;
     }
   }

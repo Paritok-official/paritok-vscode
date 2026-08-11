@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.3
+
+- **Fix (Windows): "paritok CLI not found" even when installed.** pip installs the
+  CLI as a `.cmd` launcher, which Node cannot run without a shell — so detection
+  and startup wrongly reported it missing. All child processes now go through the
+  shell on Windows (with proper arg quoting), so `.cmd`/`.bat` launchers on PATH
+  work. Same fix applies to Python detection and the pip install step.
+- Windows shutdown now kills the whole proxy process tree (`taskkill /T`) instead
+  of leaking an orphaned `paritok up` after Disable Proxy Mode.
+
 ## 0.1.2
 
 - **One-click Continue install.** If the Continue assistant isn't installed, Enable Proxy Mode now offers to install it from the Marketplace (consent prompt), so a cold-start user doesn't have to hunt for it. Also available as **Paritok: Install Continue**. (Soft, opt-in — not a hard `extensionDependencies`, so you stay free to uninstall.)
