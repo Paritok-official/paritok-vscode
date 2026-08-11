@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { ProxyManager } from "./proxyManager";
 import { writeProxyConfig } from "./paritokConfig";
-import { offerInstall } from "./installer";
+import { offerInstall, ensureContinue, continueInstalled } from "./installer";
 import * as assistant from "./assistantConfig";
 
 const SECRET_KEY = "paritok.apiKey";
@@ -22,6 +22,7 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand("paritok.setApiKey", () => setApiKey(context)),
     vscode.commands.registerCommand("paritok.installCli", () => installCli()),
+    vscode.commands.registerCommand("paritok.installContinue", () => installContinue()),
     vscode.commands.registerCommand("paritok.enableProxyMode", () => enable(context)),
     vscode.commands.registerCommand("paritok.disableProxyMode", () => disable()),
     vscode.commands.registerCommand("paritok.restartProxy", async () => {
@@ -83,6 +84,19 @@ async function installCli() {
   }
 }
 
+async function installContinue() {
+  if (continueInstalled()) {
+    vscode.window.showInformationMessage("Continue is already installed.");
+    return;
+  }
+  const ok = await ensureContinue();
+  if (ok) {
+    vscode.window.showInformationMessage(
+      "Continue installed. Add a model with your upstream API key, then run 'Paritok: Enable Proxy Mode'."
+    );
+  }
+}
+
 async function enable(context: vscode.ExtensionContext) {
   try {
     const key = await context.secrets.get(SECRET_KEY);
@@ -94,6 +108,23 @@ async function enable(context: vscode.ExtensionContext) {
       if (pick === "Set API Key") {
         await setApiKey(context);
       }
+      return;
+    }
+
+    // If Continue is missing, offer to install it — there's nothing to wire without it.
+    if (!continueInstalled()) {
+      const ok = await ensureContinue();
+      if (!ok) {
+        vscode.window.showErrorMessage(
+          "Continue is required to route through Paritok. Install it (Paritok: Install Continue), " +
+            "add a model with your upstream key, then enable again."
+        );
+        return;
+      }
+      vscode.window.showInformationMessage(
+        "Continue installed. Add a model (Anthropic or OpenAI) with your upstream API key in Continue, " +
+          "then run 'Paritok: Enable Proxy Mode' again."
+      );
       return;
     }
 

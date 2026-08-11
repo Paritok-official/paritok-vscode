@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.2
+
+- **One-click Continue install.** If the Continue assistant isn't installed, Enable Proxy Mode now offers to install it from the Marketplace (consent prompt), so a cold-start user doesn't have to hunt for it. Also available as **Paritok: Install Continue**. (Soft, opt-in — not a hard `extensionDependencies`, so you stay free to uninstall.)
+- After installing Continue you still add a model with your own upstream API key, then enable again.
+
 ## 0.1.1
 
 - **One-click CLI install.** When the paritok CLI is missing, Enable Proxy Mode now offers to run `pip install "paritok[proxy]"` for you (consent prompt). Also available as the standalone command **Paritok: Install CLI (pip)**.

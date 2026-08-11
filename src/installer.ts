@@ -12,6 +12,43 @@ import { execFile, spawn } from "child_process";
 
 const PY_CANDIDATES = ["python", "python3", "py"];
 
+/** Marketplace id of the Continue assistant this extension wires. */
+export const CONTINUE_EXT_ID = "Continue.continue";
+
+/** True if the Continue extension is currently installed in this VS Code. */
+export function continueInstalled(): boolean {
+  return !!vscode.extensions.getExtension(CONTINUE_EXT_ID);
+}
+
+/**
+ * Ensure Continue is installed, offering to install it from the Marketplace with
+ * the user's consent. Returns true if it ends up installed. Unlike a hard
+ * `extensionDependencies`, this is opt-in and leaves the user free to uninstall.
+ */
+export async function ensureContinue(): Promise<boolean> {
+  if (continueInstalled()) {
+    return true;
+  }
+  const choice = await vscode.window.showWarningMessage(
+    "Continue (the AI assistant Paritok routes through) is not installed. Install it now?",
+    { modal: true, detail: `Installs the “${CONTINUE_EXT_ID}” extension from the Marketplace.` },
+    "Install Continue"
+  );
+  if (choice !== "Install Continue") {
+    return false;
+  }
+  await vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Notification, title: "Paritok: installing Continue…" },
+    async () => {
+      await vscode.commands.executeCommand(
+        "workbench.extensions.installExtension",
+        CONTINUE_EXT_ID
+      );
+    }
+  );
+  return continueInstalled();
+}
+
 function tryVersion(cmd: string, args: string[]): Promise<boolean> {
   return new Promise((resolve) => {
     execFile(cmd, args, (err) => resolve(!err));

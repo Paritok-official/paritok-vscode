@@ -49,7 +49,9 @@ Done. The status bar shows `🔌 paritok :8080`. Use Continue exactly as before 
 | Command | What it does |
 |---|---|
 | `Paritok: Set API Key` | Store your Paritok key (VS Code SecretStorage). |
-| `Paritok: Enable Proxy Mode` | Start proxy + wire Continue. |
+| `Paritok: Install CLI (pip)` | Install the paritok CLI via `pip` (needs Python). |
+| `Paritok: Install Continue` | Install the Continue assistant from the Marketplace. |
+| `Paritok: Enable Proxy Mode` | Ensure Continue + CLI, start proxy, wire Continue. |
 | `Paritok: Disable Proxy Mode` | Stop proxy + restore original config. |
 | `Paritok: Restart Proxy` | Disable then enable. |
 | `Paritok: Show Savings (/stats)` | Open the proxy's live `/stats` JSON. |
