@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.5
+
+- **Multi-agent switch.** `Paritok: Enable` now offers a checklist of agents and wires the ones you pick, minimizing setup steps:
+  - **Claude Code** — works with your **subscription** (no API key). Sets `env.ANTHROPIC_BASE_URL` in `~/.claude/settings.json`.
+  - **Codex** — paritok generates `~/.codex/config.toml` from the `codex:` block (asks for an OpenAI key once, or uses `OPENAI_API_KEY`).
+  - **Continue** — unchanged (creates/redirects an API-key model).
+- Detected agents are pre-checked; keys are stored and reused so re-enabling needs no re-entry.
+- `Paritok: Disable` restores every wired agent's config from a byte-for-byte backup and remembers your selection across restarts (`autoStart`).
+- Commands renamed: `Enable` / `Disable` / `Restart` (from the old `…ProxyMode`). New `paritok.codexModel` setting.
+
 ## 0.1.4
 
 - **No more "No models found" dead-end.** A freshly installed Continue has an empty `models: []`. Enable Proxy Mode now offers to create a model for you — prompts for the model id (sensible default) and your upstream API key, writes it into Continue's config, then wires it. Also available as **Paritok: Add Model to Continue**.

@@ -1,60 +1,58 @@
 # Paritok for VS Code
 
-**Route your in-editor AI assistant through a local [Paritok](https://paritok.com) proxy so tool-call and file context gets compressed before it reaches the model — cutting token cost without changing how you work.**
+**Route your coding agents through a local [Paritok](https://paritok.com) proxy so tool-call and file context gets compressed before it reaches the model — cutting token cost without changing how you work.**
 
-This extension is a **thin launcher + wiring layer**. It does not re-implement any
-compression logic. All of Paritok's intelligence — tool filtering, history
-compression, context recall/expansion — stays in the Python proxy and runs
-server-side. The extension only:
+One command, pick your agents:
 
-1. starts a local `paritok up` proxy process, and
-2. points your assistant's base URL at it,
+- **Claude Code** — subscription **or** API key. No key needed here; wires `~/.claude/settings.json`.
+- **Codex** — paritok writes `~/.codex/config.toml` for you.
+- **Continue** — API-key assistant; creates/redirects a model in `~/.continue/config.*`.
 
-then gets out of the way. Once wired, your assistant talks to the proxy directly;
-the extension is **not** in the request path.
+The extension is a **thin launcher + wiring layer**. It never intercepts traffic
+and re-implements no compression logic — tool filtering, history compression, and
+context recall all stay server-side in the paritok proxy. The extension only:
+
+1. starts a local `paritok up` process, and
+2. points each agent's config at it,
+
+then gets out of the way.
 
 ```
-Continue ──request──► paritok up (127.0.0.1:8080) ──compressed──► OpenAI / Anthropic
-   ▲                                                                    │
-   └──────────────────────────── response ◄─────────────────────────────┘
-   (the extension only started the proxy and set Continue's base_url — it does not relay traffic)
+Claude Code / Codex / Continue ──► paritok up (127.0.0.1:8080) ──compressed──► Anthropic / OpenAI
+   ▲                                                                                  │
+   └──────────────────────────────────── response ◄───────────────────────────────────┘
 ```
 
-## Requirements
-
-- **Python + the paritok CLI**: `pip install "paritok[proxy]"` (the extension checks and tells you if it's missing).
-- **A supported assistant that allows a custom API base URL** — currently **[Continue](https://continue.dev)** (both `config.json` and the newer `config.yaml`). Cline/Roo work the same way but must be wired by hand for now (see *Known limits*).
-- **A Paritok API key** — free at [paritok.com](https://paritok.com) → dashboard → API keys.
-
-## Setup (one time)
+## Quick start
 
 1. Install this extension.
-2. Install **Continue** and add at least one model (Anthropic or OpenAI) with your normal upstream API key.
-3. Run **`Paritok: Set API Key`** and paste your Paritok key.
-4. Run **`Paritok: Enable Proxy Mode`**.
-5. Click **Reload Window** when prompted (so Continue picks up the new endpoint).
+2. Run **`Paritok: Set API Key`** and paste your Paritok key (free at [paritok.com](https://paritok.com)).
+3. Run **`Paritok: Enable`** → tick the agents you use → confirm.
+4. Follow the per-agent hint (reload window / restart Claude Code / run `codex`).
 
-Done. The status bar shows `🔌 paritok :8080`. Use Continue exactly as before — traffic now flows through the compressor.
+Detected agents are pre-checked, and anything missing (the paritok CLI, Continue) is offered for one-click install. The status bar shows `🔌 paritok :8080 (n)`.
 
-## What "Enable Proxy Mode" does
+## Per-agent notes
 
-- Writes a minimal `paritok.yaml` (hosted GPU backend + your key) into the extension's storage.
-- Spawns `paritok up --host <host> --port <port> --config-file <that yaml>` and waits for `/health`.
-- **Backs up your Continue `config.json` byte-for-byte**, then rewrites the `apiBase` of each matching (`anthropic` or `openai`) model to `http://127.0.0.1:8080` (or `…/v1` for OpenAI). Your upstream API keys are left untouched — Paritok forwards the `Authorization` header straight to the real provider.
+| Agent | What you need | What the extension writes |
+|---|---|---|
+| **Claude Code** | Nothing extra — works with your **subscription** | `env.ANTHROPIC_BASE_URL` in `~/.claude/settings.json` |
+| **Codex** | An OpenAI key (or `OPENAI_API_KEY` in env) | paritok generates `~/.codex/config.toml` |
+| **Continue** | An upstream API key (`sk-ant-…` / `sk-…`) | creates/redirects a model in `~/.continue/config.*` |
 
-**`Paritok: Disable Proxy Mode`** stops the proxy and restores the exact original config from the backup.
+**`Paritok: Disable`** stops the proxy and restores every agent's original config
+from its byte-for-byte backup.
 
 ## Commands
 
 | Command | What it does |
 |---|---|
 | `Paritok: Set API Key` | Store your Paritok key (VS Code SecretStorage). |
+| `Paritok: Enable` | Pick agents, ensure the CLI, start the proxy, wire them. |
+| `Paritok: Disable` | Stop the proxy, restore all agent configs. |
+| `Paritok: Restart` | Disable then Enable. |
 | `Paritok: Install CLI (pip)` | Install the paritok CLI via `pip` (needs Python). |
-| `Paritok: Install Continue` | Install the Continue assistant from the Marketplace. |
-| `Paritok: Enable Proxy Mode` | Ensure Continue + CLI, start proxy, wire Continue. |
-| `Paritok: Disable Proxy Mode` | Stop proxy + restore original config. |
-| `Paritok: Restart Proxy` | Disable then enable. |
-| `Paritok: Show Savings (/stats)` | Open the proxy's live `/stats` JSON. |
+| `Paritok: Show Savings (/stats)` | Open the proxy's live `/stats`. |
 
 ## Settings
 
@@ -62,25 +60,30 @@ Done. The status bar shows `🔌 paritok :8080`. Use Continue exactly as before 
 |---|---|---|
 | `paritok.host` | `127.0.0.1` | Host the proxy binds to. |
 | `paritok.port` | `8080` | Port the proxy listens on. |
-| `paritok.upstream` | `anthropic` | `anthropic` → base `http://host:port`; `openai` → `http://host:port/v1`. |
+| `paritok.upstream` | `anthropic` | **Continue only** — `anthropic` → base `http://host:port`; `openai` → `…/v1`. |
+| `paritok.codexModel` | `gpt-5` | **Codex only** — model id written into `~/.codex/config.toml`. |
 | `paritok.paritokCommand` | `paritok` | Path to the paritok CLI if not on PATH. |
-| `paritok.autoStart` | `false` | Enable proxy mode on VS Code startup (needs a stored key). |
-| `paritok.assistantConfigPath` | `""` | Override the Continue `config.json` location. |
+| `paritok.pythonCommand` | `""` | Python launcher for the pip install (auto-detects otherwise). |
+| `paritok.autoStart` | `false` | Re-enable the previously chosen agents on startup. |
+| `paritok.assistantConfigPath` | `""` | Override the Continue config location. |
+
+## Requirements
+
+- **Python + the paritok CLI** (`pip install "paritok[proxy]"`) — the extension offers to install the CLI for you if Python is present.
+- At least one supported agent: **Claude Code**, **Codex**, or **Continue**.
 
 ## Known limits
 
-- **Continue `config.yaml`** is supported. Note: while proxy mode is ON the YAML is re-serialized (comments are dropped); the exact original — comments included — is restored on **Disable Proxy Mode** from the byte-for-byte backup.
-- **Cline / Roo** store models in their own settings and are not auto-wired yet — set the model's `apiBase` to the URL shown in the enable notification by hand.
-- **Copilot / Cursor's built-in / JetBrains AI Assistant** do **not** expose a custom base URL, so they cannot be routed this way. This extension targets assistants that do.
-- Paritok compresses **native tool-call / file-read context**. Assistants that stuff file content into plain user text (not via tools) will see lower savings — same rule as the CLI.
+- **Cline / Roo / Cursor's built-in / JetBrains AI Assistant** are not wired — Claude Code, Codex, and Continue are the supported targets today.
+- Paritok compresses **native tool-call / file-read context**; agents that inline file content as plain text see lower savings.
 
 ## Privacy
 
-With the hosted backend (`use_gpu_server: true`), the segments Paritok compresses
-are sent to `www.paritok.com/api` for inference. Your upstream provider key is
-forwarded by the local proxy to the real provider and is **not** stored by the
-extension beyond your assistant's own config. The Paritok key is kept in VS Code
-SecretStorage.
+With the hosted backend, the segments paritok compresses are sent to
+`www.paritok.com/api` for inference. Upstream provider credentials (your Claude
+subscription, OpenAI key, …) are forwarded by the local proxy to the real
+provider and are not stored by the extension beyond each agent's own config; the
+Paritok key lives in VS Code SecretStorage.
 
 ## License
 

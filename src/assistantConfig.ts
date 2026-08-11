@@ -56,6 +56,32 @@ function resolveConfigPath(): string {
   return jsonPath; // default target even if absent, so errors name the classic path
 }
 
+/** True if Continue is installed OR a Continue config already exists. */
+export function continueInstalledOrConfigured(): boolean {
+  return (
+    !!vscode.extensions.getExtension("Continue.continue") ||
+    fs.existsSync(path.join(continueDir(), "config.json")) ||
+    fs.existsSync(path.join(continueDir(), "config.yaml"))
+  );
+}
+
+/** True if any model in the config currently points at a local proxy. */
+export function isWired(): boolean {
+  const configPath = resolveConfigPath();
+  if (!fs.existsSync(configPath)) {
+    return false;
+  }
+  try {
+    const cfg = parse(fs.readFileSync(configPath, "utf8"), isYaml(configPath));
+    const models: any[] = Array.isArray(cfg?.models) ? cfg.models : [];
+    return models.some(
+      (m) => typeof m?.apiBase === "string" && /127\.0\.0\.1|localhost/.test(m.apiBase)
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function detectAssistant(): {
   jsonExists: boolean;
   yamlExists: boolean;

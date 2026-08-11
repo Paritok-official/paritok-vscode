@@ -2,7 +2,7 @@
   "name": "paritok-vscode",
   "displayName": "Paritok",
   "description": "Route your VS Code AI assistant (Continue / Cline) through a local Paritok proxy to compress tool-call & file context and cut token cost.",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "publisher": "Paritok",
   "license": "MIT",
   "icon": "images/paritok-icon.png",
@@ -37,18 +37,18 @@
   "contributes": {
     "commands": [
       {
-        "command": "paritok.enableProxyMode",
-        "title": "Paritok: Enable Proxy Mode",
+        "command": "paritok.enable",
+        "title": "Paritok: Enable (choose agents)",
         "icon": "$(plug)"
       },
       {
-        "command": "paritok.disableProxyMode",
-        "title": "Paritok: Disable Proxy Mode (restore config)",
+        "command": "paritok.disable",
+        "title": "Paritok: Disable (restore configs)",
         "icon": "$(debug-disconnect)"
       },
       {
-        "command": "paritok.restartProxy",
-        "title": "Paritok: Restart Proxy",
+        "command": "paritok.restart",
+        "title": "Paritok: Restart",
         "icon": "$(refresh)"
       },
       {
@@ -60,16 +60,6 @@
         "command": "paritok.installCli",
         "title": "Paritok: Install CLI (pip)",
         "icon": "$(cloud-download)"
-      },
-      {
-        "command": "paritok.installContinue",
-        "title": "Paritok: Install Continue",
-        "icon": "$(extensions)"
-      },
-      {
-        "command": "paritok.addModel",
-        "title": "Paritok: Add Model to Continue",
-        "icon": "$(add)"
       },
       {
         "command": "paritok.showStats",
@@ -97,7 +87,12 @@
             "openai"
           ],
           "default": "anthropic",
-          "description": "Which API surface your assistant uses. 'anthropic' wires base_url to http://host:port ; 'openai' wires it to http://host:port/v1."
+          "description": "Continue only: which API surface the created/redirected model uses. 'anthropic' → http://host:port ; 'openai' → http://host:port/v1. (Claude Code and Codex ignore this.)"
+        },
+        "paritok.codexModel": {
+          "type": "string",
+          "default": "gpt-5",
+          "description": "Codex only: the model id written into ~/.codex/config.toml."
         },
         "paritok.paritokCommand": {
           "type": "string",
@@ -112,7 +107,7 @@
         "paritok.autoStart": {
           "type": "boolean",
           "default": false,
-          "description": "Automatically enable proxy mode when VS Code starts (requires an API key to already be set)."
+          "description": "Re-enable the previously chosen agents when VS Code starts (requires an API key and a prior Enable)."
         },
         "paritok.assistantConfigPath": {
           "type": "string",

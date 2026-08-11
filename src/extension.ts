@@ -1,16 +1,19 @@
 import * as vscode from "vscode";
 import { ProxyManager } from "./proxyManager";
-import { writeProxyConfig } from "./paritokConfig";
-import { offerInstall, ensureContinue, continueInstalled } from "./installer";
-import * as assistant from "./assistantConfig";
+import { writeProxyConfig, CodexOptions } from "./paritokConfig";
+import { offerInstall } from "./installer";
+import { AGENTS, Agent, AgentId, EnableCtx, agentById } from "./agents";
 
 const SECRET_KEY = "paritok.apiKey";
+const STATE_ENABLED = "paritok.enabledAgents";
 
 let proxy: ProxyManager;
 let status: vscode.StatusBarItem;
 let output: vscode.OutputChannel;
+let ctx: vscode.ExtensionContext;
 
 export async function activate(context: vscode.ExtensionContext) {
+  ctx = context;
   output = vscode.window.createOutputChannel("Paritok");
   proxy = new ProxyManager(output);
 
@@ -20,38 +23,45 @@ export async function activate(context: vscode.ExtensionContext) {
   render();
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("paritok.setApiKey", () => setApiKey(context)),
-    vscode.commands.registerCommand("paritok.installCli", () => installCli()),
-    vscode.commands.registerCommand("paritok.installContinue", () => installContinue()),
-    vscode.commands.registerCommand("paritok.addModel", () => addModel()),
-    vscode.commands.registerCommand("paritok.enableProxyMode", () => enable(context)),
-    vscode.commands.registerCommand("paritok.disableProxyMode", () => disable()),
-    vscode.commands.registerCommand("paritok.restartProxy", async () => {
+    vscode.commands.registerCommand("paritok.setApiKey", () => setApiKey()),
+    vscode.commands.registerCommand("paritok.enable", () => enable()),
+    vscode.commands.registerCommand("paritok.disable", () => disable()),
+    vscode.commands.registerCommand("paritok.restart", async () => {
       await disable();
-      await enable(context);
+      await enable();
     }),
-    vscode.commands.registerCommand("paritok.showStats", () => showStats())
+    vscode.commands.registerCommand("paritok.showStats", () => showStats()),
+    vscode.commands.registerCommand("paritok.installCli", () => installCli())
   );
 
-  // Optional auto-start on launch, only if a key is already stored.
   const auto = vscode.workspace.getConfiguration("paritok").get<boolean>("autoStart", false);
-  if (auto && (await context.secrets.get(SECRET_KEY))) {
-    enable(context).catch((e) => output.appendLine(`auto-start failed: ${e.message}`));
+  if (auto && (await context.secrets.get(SECRET_KEY)) && enabledIds().length) {
+    enable().catch((e) => output.appendLine(`auto-start failed: ${e.message}`));
   }
 }
 
 export async function deactivate() {
-  // Best-effort cleanup: restore the assistant config and kill the proxy so we
-  // never leave the user pointed at a dead port.
-  try {
-    assistant.unwire();
-  } catch {
-    /* ignore */
+  // Best-effort: restore every wired agent and kill the proxy.
+  for (const id of enabledIds()) {
+    try {
+      await agentById(id)?.disable();
+    } catch {
+      /* ignore */
+    }
   }
   proxy?.stop();
 }
 
-async function setApiKey(context: vscode.ExtensionContext) {
+// ─────────────────────────────── state helpers ─────────────────────────────
+function enabledIds(): AgentId[] {
+  return (ctx.globalState.get<AgentId[]>(STATE_ENABLED) || []).filter(Boolean);
+}
+async function setEnabledIds(ids: AgentId[]) {
+  await ctx.globalState.update(STATE_ENABLED, ids);
+}
+
+// ─────────────────────────────────── key ───────────────────────────────────
+async function setApiKey(): Promise<string | undefined> {
   const value = await vscode.window.showInputBox({
     prompt: "Paritok API key (create one at paritok.com → dashboard → API keys)",
     placeHolder: "pk_live_...",
@@ -59,17 +69,146 @@ async function setApiKey(context: vscode.ExtensionContext) {
     ignoreFocusOut: true,
   });
   if (value === undefined) {
-    return; // cancelled
+    return undefined;
   }
   if (!value.trim()) {
-    await context.secrets.delete(SECRET_KEY);
+    await ctx.secrets.delete(SECRET_KEY);
     vscode.window.showInformationMessage("Paritok API key cleared.");
-    return;
+    return undefined;
   }
-  await context.secrets.store(SECRET_KEY, value.trim());
+  await ctx.secrets.store(SECRET_KEY, value.trim());
   vscode.window.showInformationMessage("Paritok API key saved.");
+  return value.trim();
 }
 
+// ────────────────────────────────── enable ─────────────────────────────────
+async function enable() {
+  try {
+    let key = await ctx.secrets.get(SECRET_KEY);
+    if (!key) {
+      key = await setApiKey();
+      if (!key) {
+        return;
+      }
+    }
+
+    // 1) Which agents to route? Detected ones are pre-checked.
+    const detected = await Promise.all(AGENTS.map((a) => a.detect()));
+    const items = AGENTS.map((a, i) => ({
+      label: a.label,
+      description: detected[i] ? "$(check) detected" : "not detected",
+      detail: a.detail,
+      picked: detected[i],
+      id: a.id as AgentId,
+    }));
+    const chosen = await vscode.window.showQuickPick(items, {
+      canPickMany: true,
+      title: "Paritok — route which agents through the proxy?",
+      placeHolder: "Space to toggle, Enter to confirm",
+    });
+    if (!chosen || chosen.length === 0) {
+      return;
+    }
+    const selected: Agent[] = chosen.map((c) => agentById(c.id)!).filter(Boolean);
+
+    // 2) Gather inputs (keys/models), reusing stored secrets. Cancel aborts all.
+    const collected = new Map<AgentId, any>();
+    for (const a of selected) {
+      const data = a.collect ? await a.collect(ctx) : {};
+      if (data === undefined) {
+        vscode.window.showInformationMessage(`Paritok: cancelled while setting up ${a.label}.`);
+        return;
+      }
+      collected.set(a.id, data);
+    }
+
+    // 3) Codex is wired by paritok itself → fold its options into paritok.yaml.
+    let codexOpts: CodexOptions | undefined;
+    if (selected.some((a) => a.id === "codex")) {
+      const d = collected.get("codex");
+      codexOpts = { model: d.model, apiKey: d.apiKey };
+    }
+
+    await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: "Paritok: enabling" },
+      async (p) => {
+        // 4) Ensure the CLI, then (re)start the proxy with the fresh config.
+        if (!(await proxy.checkInstalled())) {
+          p.report({ message: "installing CLI…" });
+          const ok = await offerInstall(output);
+          if (!ok || !(await proxy.checkInstalled())) {
+            throw new Error(
+              'paritok CLI unavailable. Install it:  pip install "paritok[proxy]"  ' +
+                "or set paritok.paritokCommand."
+            );
+          }
+        }
+        p.report({ message: "writing config…" });
+        const cfgPath = await writeProxyConfig(ctx, key!, { codex: codexOpts });
+
+        p.report({ message: "starting proxy…" });
+        proxy.stop(); // apply the fresh yaml (also (re)writes ~/.codex/config.toml)
+        await proxy.start(cfgPath);
+
+        // 5) Wire the file-config agents (Codex already wired by paritok at start).
+        const ectx: EnableCtx = {
+          baseAnthropic: `http://${proxy.host}:${proxy.port}`,
+          baseOpenAIv1: `http://${proxy.host}:${proxy.port}/v1`,
+        };
+        p.report({ message: "wiring agents…" });
+        for (const a of selected) {
+          if (!a.viaProxy) {
+            await a.enable(ectx, collected.get(a.id));
+          }
+        }
+      }
+    );
+
+    await setEnabledIds(selected.map((a) => a.id));
+    render();
+
+    // 6) Summary + per-agent next steps.
+    const hints = selected.map((a) => a.postEnableHint).filter(Boolean) as string[];
+    const names = selected.map((a) => a.label).join(", ");
+    const needReload = selected.some((a) => a.id === "continue");
+    const msg = `Paritok routing: ${names} (proxy on ${proxy.host}:${proxy.port}).` +
+      (hints.length ? "\n• " + hints.join("\n• ") : "");
+    if (needReload) {
+      const r = await vscode.window.showInformationMessage(msg, "Reload Window");
+      if (r === "Reload Window") {
+        vscode.commands.executeCommand("workbench.action.reloadWindow");
+      }
+    } else {
+      vscode.window.showInformationMessage(msg);
+    }
+  } catch (e: any) {
+    render();
+    vscode.window.showErrorMessage(`Paritok: ${e.message}`);
+    output.appendLine(`enable failed: ${e.stack || e.message}`);
+  }
+}
+
+// ───────────────────────────────── disable ─────────────────────────────────
+async function disable() {
+  const ids = enabledIds();
+  for (const id of ids) {
+    try {
+      await agentById(id)?.disable();
+    } catch (e: any) {
+      vscode.window.showErrorMessage(`Paritok: could not restore ${id} — ${e.message}`);
+    }
+  }
+  proxy.stop();
+  await setEnabledIds([]);
+  render();
+  vscode.window.showInformationMessage(
+    ids.length
+      ? `Paritok stopped; restored ${ids.length} agent config(s).`
+      : "Paritok proxy stopped."
+  );
+}
+
+// ──────────────────────────────── CLI install ──────────────────────────────
 async function installCli() {
   if (await proxy.checkInstalled()) {
     vscode.window.showInformationMessage("Paritok CLI is already installed.");
@@ -78,160 +217,17 @@ async function installCli() {
   try {
     const ok = await offerInstall(output);
     if (ok && (await proxy.checkInstalled())) {
-      vscode.window.showInformationMessage("Paritok CLI installed. Run 'Paritok: Enable Proxy Mode'.");
+      vscode.window.showInformationMessage("Paritok CLI installed. Run 'Paritok: Enable'.");
     }
   } catch (e: any) {
     vscode.window.showErrorMessage(`Paritok: install failed — ${e.message}`);
   }
 }
 
-async function installContinue() {
-  if (continueInstalled()) {
-    vscode.window.showInformationMessage("Continue is already installed.");
-    return;
-  }
-  const ok = await ensureContinue();
-  if (ok) {
-    vscode.window.showInformationMessage(
-      "Continue installed. Add a model with your upstream API key, then run 'Paritok: Enable Proxy Mode'."
-    );
-  }
-}
-
-async function addModel() {
-  const upstream = vscode.workspace
-    .getConfiguration("paritok")
-    .get<string>("upstream", "anthropic");
-  try {
-    if (assistant.hasMatchingModel(upstream)) {
-      vscode.window.showInformationMessage(`Continue already has a ${upstream} model.`);
-      return;
-    }
-    const ok = await assistant.ensureModel(upstream);
-    if (ok) {
-      vscode.window.showInformationMessage(
-        `Added a ${upstream} model to Continue. Run 'Paritok: Enable Proxy Mode'.`
-      );
-    }
-  } catch (e: any) {
-    vscode.window.showErrorMessage(`Paritok: could not add model — ${e.message}`);
-  }
-}
-
-async function enable(context: vscode.ExtensionContext) {
-  try {
-    const key = await context.secrets.get(SECRET_KEY);
-    if (!key) {
-      const pick = await vscode.window.showWarningMessage(
-        "No Paritok API key set. Set one now?",
-        "Set API Key"
-      );
-      if (pick === "Set API Key") {
-        await setApiKey(context);
-      }
-      return;
-    }
-
-    // If Continue is missing, offer to install it — there's nothing to wire without it.
-    if (!continueInstalled()) {
-      const ok = await ensureContinue();
-      if (!ok) {
-        vscode.window.showErrorMessage(
-          "Continue is required to route through Paritok. Install it (Paritok: Install Continue), " +
-            "add a model with your upstream key, then enable again."
-        );
-        return;
-      }
-      vscode.window.showInformationMessage(
-        "Continue installed. Add a model (Anthropic or OpenAI) with your upstream API key in Continue, " +
-          "then run 'Paritok: Enable Proxy Mode' again."
-      );
-      return;
-    }
-
-    // If the CLI is missing, offer to pip-install it before we try to start it.
-    if (!(await proxy.checkInstalled())) {
-      const installed = await offerInstall(output);
-      if (!installed || !(await proxy.checkInstalled())) {
-        vscode.window.showErrorMessage(
-          'Paritok CLI still not available. Install it with:  pip install "paritok[proxy]"  ' +
-            "— or set paritok.paritokCommand to its path, then enable again."
-        );
-        return;
-      }
-    }
-
-    const upstream = vscode.workspace
-      .getConfiguration("paritok")
-      .get<string>("upstream", "anthropic");
-
-    // Ensure Continue actually has a model for this provider. A freshly installed
-    // Continue has `models: []`, so offer to create one (upstream key + model id)
-    // instead of dead-ending on "no models found".
-    if (!assistant.hasMatchingModel(upstream)) {
-      const created = await assistant.ensureModel(upstream);
-      if (!created) {
-        vscode.window.showErrorMessage(
-          `No ${upstream} model in Continue, and none was created. Add one in Continue ` +
-            `(or switch paritok.upstream), then enable again.`
-        );
-        return;
-      }
-    }
-
-    await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: "Paritok: enabling proxy mode" },
-      async (p) => {
-        p.report({ message: "writing config…" });
-        const cfgPath = await writeProxyConfig(context, key);
-
-        p.report({ message: "starting proxy…" });
-        await proxy.start(cfgPath);
-
-        p.report({ message: "wiring assistant…" });
-        const res = assistant.wire(proxy.baseUrl(), upstream);
-
-        render();
-        const reload = await vscode.window.showInformationMessage(
-          `Paritok proxy running on ${proxy.baseUrl()} — redirected ${res.changed} ` +
-            `${upstream} model(s) in Continue. Reload the window so Continue picks up the new endpoint.`,
-          "Reload Window"
-        );
-        if (reload === "Reload Window") {
-          vscode.commands.executeCommand("workbench.action.reloadWindow");
-        }
-      }
-    );
-  } catch (e: any) {
-    // If wiring failed after the proxy came up, leave the proxy running (the user
-    // may wire manually) but surface the reason.
-    render();
-    vscode.window.showErrorMessage(`Paritok: ${e.message}`);
-    output.appendLine(`enable failed: ${e.stack || e.message}`);
-  }
-}
-
-async function disable() {
-  const restored = (() => {
-    try {
-      return assistant.unwire();
-    } catch (e: any) {
-      vscode.window.showErrorMessage(`Paritok: could not restore config — ${e.message}`);
-      return false;
-    }
-  })();
-  proxy.stop();
-  render();
-  vscode.window.showInformationMessage(
-    restored
-      ? "Paritok proxy stopped and Continue config restored."
-      : "Paritok proxy stopped. (No config backup to restore.)"
-  );
-}
-
+// ─────────────────────────────────── stats ─────────────────────────────────
 async function showStats() {
   if (!proxy.running) {
-    vscode.window.showInformationMessage("Paritok proxy is not running. Run 'Paritok: Enable Proxy Mode'.");
+    vscode.window.showInformationMessage("Paritok proxy is not running. Run 'Paritok: Enable'.");
     return;
   }
   try {
@@ -249,14 +245,15 @@ async function showStats() {
   }
 }
 
+// ─────────────────────────────────── ui ────────────────────────────────────
 function render() {
+  const n = enabledIds().length;
   if (proxy?.running) {
-    status.text = `$(plug) paritok :${proxy.port}`;
-    status.tooltip = `Paritok proxy running on ${proxy.baseUrl()} — click for /stats`;
-    status.backgroundColor = undefined;
+    status.text = `$(plug) paritok :${proxy.port}${n ? ` (${n})` : ""}`;
+    status.tooltip = `Paritok routing ${n} agent(s) on :${proxy.port} — click for /stats`;
   } else {
-    status.text = `$(circle-slash) paritok off`;
-    status.tooltip = "Paritok proxy stopped — run 'Paritok: Enable Proxy Mode'";
+    status.text = "$(circle-slash) paritok off";
+    status.tooltip = "Paritok proxy stopped — run 'Paritok: Enable'";
   }
   status.show();
 }
