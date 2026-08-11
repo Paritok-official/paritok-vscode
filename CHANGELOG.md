@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.11
+
+- **Fix Claude Code routing UX.** An already-running Claude Code session keeps the endpoint it was spawned with, so enabling won't switch it — you must start a **new** session. The success message now says exactly that and no longer suggests "Reload Window" (reloading races the native extension's restart and often respawns the session before our env is set — which is why a reload appeared to "not work" but a fresh window did).
+- On reload/restart, the routing env var is now set **synchronously at activation** (before any await) so a `claude` spawn during the same activation already inherits it.
+
 ## 0.1.10
 
 - **Harden proxy shutdown further.** `deactivate()` now kills the proxy *first*, before any awaited config-restore work, so a short shutdown budget can't cut off the kill and orphan the process. Also registers a synchronous `process.on("exit")` cleanup as a last-ditch backstop when VS Code cuts `deactivate()` short. (Combined with 0.1.9's synchronous kill + activation-time reaping.)

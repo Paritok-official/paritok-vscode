@@ -39,6 +39,14 @@ export async function activate(context: vscode.ExtensionContext) {
   // Reap any proxy this extension orphaned in a previous session (e.g. left
   // listening after an abrupt VS Code close). Only kills OUR config's process.
   proxy.reapOrphans();
+
+  // If Claude Code was routed before a reload, set the env var SYNCHRONOUSLY and
+  // early — before any await — so a `claude` spawn during this same activation
+  // (the native extension re-activates in parallel) already sees it. The proxy
+  // is (re)started just below by bringUp.
+  if (enabledIds().includes("claude-code")) {
+    setClaudeEnv();
+  }
   render();
 
   // Last-ditch cleanup: VS Code may cut off async deactivate() on shutdown, so
@@ -274,15 +282,15 @@ async function enableClaudeCode() {
     );
     setClaudeEnv(); // only after the proxy is confirmed healthy (ensureProxy waits on /health)
     render();
-    const r = await vscode.window.showInformationMessage(
-      `Paritok: Claude Code now routes through the proxy on ${proxy.host}:${proxy.port} — ` +
-        `keep using the native panel. Start a NEW Claude Code session (or reload the window) to pick it up. ` +
-        `Nothing is written to ~/.claude; it clears itself when VS Code closes.`,
-      "Reload Window"
+    // Do NOT suggest a window reload: reloading races the native extension's own
+    // restart and the session often respawns before our env is set. Starting a
+    // NEW Claude Code session in the current window always works — the env is
+    // already live in this extension host, so the new `claude` spawn inherits it.
+    vscode.window.showInformationMessage(
+      `Paritok: Claude Code routed (proxy on ${proxy.host}:${proxy.port}). ` +
+        `Open a NEW Claude Code session/chat to route it — an already-running session keeps its old endpoint until you start a new one. ` +
+        `Nothing is written to ~/.claude; it clears when VS Code closes.`
     );
-    if (r === "Reload Window") {
-      vscode.commands.executeCommand("workbench.action.reloadWindow");
-    }
   } catch (e: any) {
     render();
     vscode.window.showErrorMessage(`Paritok: ${e.message}`);
