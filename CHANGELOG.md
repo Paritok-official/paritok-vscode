@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.14
+
+- **Codex can now use your ChatGPT subscription — no API key.** Enabling Codex asks how to authenticate: **ChatGPT subscription** (recommended; run `codex login` once, nothing to paste) or **OpenAI API key**. Subscription routing needs paritok ≥ 1.3.4 (the proxy forwards the ChatGPT OAuth token to the ChatGPT backend). Requires the matching `subscription` flag written into paritok.yaml, which this version now emits.
+
 ## 0.1.13
 
 - **Codex now covers the VS Code panel too, automatically.** OpenAI's "Codex" extension (`openai.chatgpt`) spawns `codex` with `CODEX_HOME=~/.codex`, so it reads the same `config.toml` paritok generates — enabling Codex routes both the terminal `codex` and the Codex panel, no extra setup. Detection now also recognises the extension (not just the CLI), so panel-only users aren't wrongly told "not detected". Start a new Codex session after enabling to pick it up.

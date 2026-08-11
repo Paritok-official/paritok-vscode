@@ -14,6 +14,7 @@ import {
 const SECRET_KEY = "paritok.apiKey";
 const OPENAI_KEY = "paritok.openaiKey";
 const STATE_ENABLED = "paritok.enabledAgents";
+const STATE_CODEX_SUB = "paritok.codexSubscription";
 
 let proxy: ProxyManager;
 let status: vscode.StatusBarItem;
@@ -157,8 +158,9 @@ async function writeConfig(key: string): Promise<string> {
   if (enabledIds().includes("codex")) {
     const model =
       vscode.workspace.getConfiguration("paritok").get<string>("codexModel", "gpt-5") || "gpt-5";
-    const okey = (await ctx.secrets.get(OPENAI_KEY)) || "";
-    codex = { model, apiKey: okey };
+    const subscription = ctx.globalState.get<boolean>(STATE_CODEX_SUB, true);
+    const okey = subscription ? "" : (await ctx.secrets.get(OPENAI_KEY)) || "";
+    codex = { model, subscription, apiKey: okey };
   }
   return writeProxyConfig(ctx, key, { codex });
 }
@@ -326,16 +328,20 @@ async function enableCodex() {
     }
     const data = await codex.collect!(ctx);
     if (data === undefined) {
-      return; // user cancelled the key prompt
+      return; // user cancelled
     }
     await addEnabled("codex");
+    await ctx.globalState.update(STATE_CODEX_SUB, !!data.subscription);
     await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title: "Paritok: enabling Codex" },
       async (p) => restartProxy(key, p)
     );
     render();
+    const loginHint = data.subscription
+      ? " Run `codex login` (ChatGPT) if you haven't, then start a new Codex session."
+      : " Start a new Codex session (terminal `codex` or the panel).";
     vscode.window.showInformationMessage(
-      `Paritok: Codex routed (proxy on ${proxy.host}:${proxy.port}). Run \`codex\` in a terminal.`
+      `Paritok: Codex routed (proxy on ${proxy.host}:${proxy.port}).${loginHint}`
     );
   } catch (e: any) {
     render();

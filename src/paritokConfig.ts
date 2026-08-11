@@ -4,7 +4,9 @@ import * as path from "path";
 
 export interface CodexOptions {
   model: string;
-  /** OpenAI key embedded into the generated ~/.codex/config.toml; "" → env OPENAI_API_KEY. */
+  /** true → ChatGPT subscription (requires_openai_auth, no key). false → use apiKey. */
+  subscription: boolean;
+  /** OpenAI key (only when subscription is false); "" → env OPENAI_API_KEY. */
   apiKey: string;
 }
 
@@ -50,6 +52,7 @@ export async function writeProxyConfig(
       "codex:",
       "  enabled: true",
       `  model: "${q(opts.codex.model)}"`,
+      `  subscription: ${opts.codex.subscription ? "true" : "false"}`,
       `  api_key: "${q(opts.codex.apiKey)}"`
     );
   } else {
