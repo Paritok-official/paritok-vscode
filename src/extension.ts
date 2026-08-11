@@ -23,6 +23,7 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("paritok.setApiKey", () => setApiKey(context)),
     vscode.commands.registerCommand("paritok.installCli", () => installCli()),
     vscode.commands.registerCommand("paritok.installContinue", () => installContinue()),
+    vscode.commands.registerCommand("paritok.addModel", () => addModel()),
     vscode.commands.registerCommand("paritok.enableProxyMode", () => enable(context)),
     vscode.commands.registerCommand("paritok.disableProxyMode", () => disable()),
     vscode.commands.registerCommand("paritok.restartProxy", async () => {
@@ -97,6 +98,26 @@ async function installContinue() {
   }
 }
 
+async function addModel() {
+  const upstream = vscode.workspace
+    .getConfiguration("paritok")
+    .get<string>("upstream", "anthropic");
+  try {
+    if (assistant.hasMatchingModel(upstream)) {
+      vscode.window.showInformationMessage(`Continue already has a ${upstream} model.`);
+      return;
+    }
+    const ok = await assistant.ensureModel(upstream);
+    if (ok) {
+      vscode.window.showInformationMessage(
+        `Added a ${upstream} model to Continue. Run 'Paritok: Enable Proxy Mode'.`
+      );
+    }
+  } catch (e: any) {
+    vscode.window.showErrorMessage(`Paritok: could not add model — ${e.message}`);
+  }
+}
+
 async function enable(context: vscode.ExtensionContext) {
   try {
     const key = await context.secrets.get(SECRET_KEY);
@@ -140,6 +161,24 @@ async function enable(context: vscode.ExtensionContext) {
       }
     }
 
+    const upstream = vscode.workspace
+      .getConfiguration("paritok")
+      .get<string>("upstream", "anthropic");
+
+    // Ensure Continue actually has a model for this provider. A freshly installed
+    // Continue has `models: []`, so offer to create one (upstream key + model id)
+    // instead of dead-ending on "no models found".
+    if (!assistant.hasMatchingModel(upstream)) {
+      const created = await assistant.ensureModel(upstream);
+      if (!created) {
+        vscode.window.showErrorMessage(
+          `No ${upstream} model in Continue, and none was created. Add one in Continue ` +
+            `(or switch paritok.upstream), then enable again.`
+        );
+        return;
+      }
+    }
+
     await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title: "Paritok: enabling proxy mode" },
       async (p) => {
@@ -150,9 +189,6 @@ async function enable(context: vscode.ExtensionContext) {
         await proxy.start(cfgPath);
 
         p.report({ message: "wiring assistant…" });
-        const upstream = vscode.workspace
-          .getConfiguration("paritok")
-          .get<string>("upstream", "anthropic");
         const res = assistant.wire(proxy.baseUrl(), upstream);
 
         render();

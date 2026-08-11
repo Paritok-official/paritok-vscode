@@ -74,6 +74,87 @@ function parse(raw: string, asYaml: boolean): any {
   return asYaml ? yaml.load(raw) : JSON.parse(raw);
 }
 
+/** True if the config already has a model for the wanted upstream provider. */
+export function hasMatchingModel(upstream: string): boolean {
+  const wanted = upstream === "openai" ? "openai" : "anthropic";
+  const configPath = resolveConfigPath();
+  if (!fs.existsSync(configPath)) {
+    return false;
+  }
+  try {
+    const cfg = parse(fs.readFileSync(configPath, "utf8"), isYaml(configPath));
+    const models: any[] = Array.isArray(cfg?.models) ? cfg.models : [];
+    return models.some((m) => m && m.provider === wanted);
+  } catch {
+    return false;
+  }
+}
+
+const DEFAULT_MODEL: Record<string, string> = {
+  anthropic: "claude-3-5-sonnet-latest",
+  openai: "gpt-4o",
+};
+
+/**
+ * Ensure a model for the wanted provider exists in the assistant config,
+ * prompting for the model id + upstream API key and appending an entry if not.
+ * The new entry uses the provider's default endpoint (no apiBase) — `wire()`
+ * flips its apiBase to the proxy afterwards. Persists across disable, since it's
+ * written before wire() takes its backup.
+ *
+ * Returns true if a matching model exists (already or newly created), false if
+ * the user cancelled.
+ */
+export async function ensureModel(upstream: string): Promise<boolean> {
+  if (hasMatchingModel(upstream)) {
+    return true;
+  }
+  const wanted = upstream === "openai" ? "openai" : "anthropic";
+
+  const model = await vscode.window.showInputBox({
+    prompt: `Model id for your ${wanted} model in Continue`,
+    value: DEFAULT_MODEL[wanted],
+    ignoreFocusOut: true,
+  });
+  if (!model) {
+    return false;
+  }
+  const apiKey = await vscode.window.showInputBox({
+    prompt: `Your ${wanted} API key (kept in Continue's config, forwarded to the provider)`,
+    placeHolder: wanted === "openai" ? "sk-..." : "sk-ant-...",
+    password: true,
+    ignoreFocusOut: true,
+  });
+  if (apiKey === undefined) {
+    return false;
+  }
+
+  const configPath = resolveConfigPath();
+  const asYaml = isYaml(configPath);
+  let cfg: any = { name: "Main Config", version: "1.0.0", schema: "v1", models: [] };
+  if (fs.existsSync(configPath)) {
+    try {
+      cfg = parse(fs.readFileSync(configPath, "utf8"), asYaml) || cfg;
+    } catch (e: any) {
+      throw new Error(`Could not parse ${configPath}: ${e.message}`);
+    }
+  } else {
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+  }
+  if (!Array.isArray(cfg.models)) {
+    cfg.models = [];
+  }
+  cfg.models.push({
+    name: `Paritok (${wanted})`,
+    provider: wanted,
+    model,
+    apiKey: apiKey.trim(),
+    roles: ["chat", "edit", "apply"],
+  });
+  fs.writeFileSync(configPath, serialize(cfg, asYaml), "utf8");
+  return true;
+}
+
 function serialize(cfg: any, asYaml: boolean): string {
   return asYaml
     ? yaml.dump(cfg, { lineWidth: 120, noRefs: true })

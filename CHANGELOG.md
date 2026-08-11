@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.4
+
+- **No more "No models found" dead-end.** A freshly installed Continue has an empty `models: []`. Enable Proxy Mode now offers to create a model for you — prompts for the model id (sensible default) and your upstream API key, writes it into Continue's config, then wires it. Also available as **Paritok: Add Model to Continue**.
+- The created model persists across Disable Proxy Mode (only its `apiBase` is toggled).
+
 ## 0.1.3
 
 - **Fix (Windows): "paritok CLI not found" even when installed.** pip installs the
