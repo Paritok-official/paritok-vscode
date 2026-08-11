@@ -2,7 +2,7 @@
   "name": "paritok-vscode",
   "displayName": "Paritok",
   "description": "Route your VS Code AI assistant (Continue / Cline) through a local Paritok proxy to compress tool-call & file context and cut token cost.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "Paritok",
   "license": "MIT",
   "icon": "images/paritok-icon.png",
@@ -57,6 +57,11 @@
         "icon": "$(key)"
       },
       {
+        "command": "paritok.installCli",
+        "title": "Paritok: Install CLI (pip)",
+        "icon": "$(cloud-download)"
+      },
+      {
         "command": "paritok.showStats",
         "title": "Paritok: Show Savings (/stats)",
         "icon": "$(graph)"
@@ -88,6 +93,11 @@
           "type": "string",
           "default": "paritok",
           "description": "The paritok CLI executable. Change if it is not on PATH (e.g. an absolute path to the venv's paritok)."
+        },
+        "paritok.pythonCommand": {
+          "type": "string",
+          "default": "",
+          "description": "Python launcher used for 'Install CLI (pip)'. Leave empty to auto-detect (python / python3 / py)."
         },
         "paritok.autoStart": {
           "type": "boolean",

@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { ProxyManager } from "./proxyManager";
 import { writeProxyConfig } from "./paritokConfig";
+import { offerInstall } from "./installer";
 import * as assistant from "./assistantConfig";
 
 const SECRET_KEY = "paritok.apiKey";
@@ -20,6 +21,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.commands.registerCommand("paritok.setApiKey", () => setApiKey(context)),
+    vscode.commands.registerCommand("paritok.installCli", () => installCli()),
     vscode.commands.registerCommand("paritok.enableProxyMode", () => enable(context)),
     vscode.commands.registerCommand("paritok.disableProxyMode", () => disable()),
     vscode.commands.registerCommand("paritok.restartProxy", async () => {
@@ -66,6 +68,21 @@ async function setApiKey(context: vscode.ExtensionContext) {
   vscode.window.showInformationMessage("Paritok API key saved.");
 }
 
+async function installCli() {
+  if (await proxy.checkInstalled()) {
+    vscode.window.showInformationMessage("Paritok CLI is already installed.");
+    return;
+  }
+  try {
+    const ok = await offerInstall(output);
+    if (ok && (await proxy.checkInstalled())) {
+      vscode.window.showInformationMessage("Paritok CLI installed. Run 'Paritok: Enable Proxy Mode'.");
+    }
+  } catch (e: any) {
+    vscode.window.showErrorMessage(`Paritok: install failed — ${e.message}`);
+  }
+}
+
 async function enable(context: vscode.ExtensionContext) {
   try {
     const key = await context.secrets.get(SECRET_KEY);
@@ -78,6 +95,18 @@ async function enable(context: vscode.ExtensionContext) {
         await setApiKey(context);
       }
       return;
+    }
+
+    // If the CLI is missing, offer to pip-install it before we try to start it.
+    if (!(await proxy.checkInstalled())) {
+      const installed = await offerInstall(output);
+      if (!installed || !(await proxy.checkInstalled())) {
+        vscode.window.showErrorMessage(
+          'Paritok CLI still not available. Install it with:  pip install "paritok[proxy]"  ' +
+            "— or set paritok.paritokCommand to its path, then enable again."
+        );
+        return;
+      }
     }
 
     await vscode.window.withProgress(

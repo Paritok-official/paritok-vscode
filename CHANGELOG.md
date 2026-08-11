@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1
+
+- **One-click CLI install.** When the paritok CLI is missing, Enable Proxy Mode now offers to run `pip install "paritok[proxy]"` for you (consent prompt). Also available as the standalone command **Paritok: Install CLI (pip)**.
+- Auto-detects a Python launcher (`python` / `python3` / `py`); override with the new `paritok.pythonCommand` setting. If Python itself is absent, points you to python.org (the extension cannot install Python).
+
 ## 0.1.0
 
 Initial release — **Proxy Mode** (the "B1" approach).
