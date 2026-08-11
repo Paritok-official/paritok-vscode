@@ -127,14 +127,18 @@ function codexTomlPath(): string {
 const codex: Agent = {
   id: "codex",
   label: "Codex",
-  detail: "OpenAI Codex CLI. paritok writes ~/.codex/config.toml for you.",
+  detail: "OpenAI Codex — routes both the `codex` CLI and the Codex VS Code panel (both read ~/.codex/config.toml).",
   viaProxy: true,
-  postEnableHint: "Run `codex` in a terminal — it now routes through the proxy.",
+  postEnableHint: "Start a NEW Codex session (terminal `codex`, or the Codex panel) to pick up the new endpoint.",
 
   async detect(): Promise<boolean> {
-    // Require the actual Codex CLI — a bare ~/.codex dir is too weak a signal
-    // (other tools use that path) and we must not clobber an unrelated config.
-    return runCheck("codex", ["--version"]);
+    // The Codex CLI, or OpenAI's "Codex" VS Code extension (openai.chatgpt) —
+    // its panel spawns codex with CODEX_HOME=~/.codex, so it reads the same
+    // config.toml paritok writes. Either presence means Codex is routable.
+    return (
+      !!vscode.extensions.getExtension("openai.chatgpt") ||
+      (await runCheck("codex", ["--version"]))
+    );
   },
 
   isWired(): boolean {

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.13
+
+- **Codex now covers the VS Code panel too, automatically.** OpenAI's "Codex" extension (`openai.chatgpt`) spawns `codex` with `CODEX_HOME=~/.codex`, so it reads the same `config.toml` paritok generates — enabling Codex routes both the terminal `codex` and the Codex panel, no extra setup. Detection now also recognises the extension (not just the CLI), so panel-only users aren't wrongly told "not detected". Start a new Codex session after enabling to pick it up.
+
 ## 0.1.12
 
 - **Reload Window now reliably re-routes Claude Code.** The routing env var is set on the *very first line* of activation (from stored state + config, fully synchronous) — before the output channel, the proxy, anything — so the native Claude Code extension inherits it whenever it spawns, winning the reload race. "Reload Window" is back as the one-click path after enabling (starting a new session still works too).

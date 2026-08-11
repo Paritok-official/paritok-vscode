@@ -246,7 +246,7 @@ async function enableMenu() {
     {
       label: "Codex",
       description: codexDet ? "$(check) detected" : "not detected",
-      detail: "paritok writes ~/.codex/config.toml for you (asks for an OpenAI key once).",
+      detail: "Routes the `codex` CLI and the Codex VS Code panel via ~/.codex/config.toml (asks for an OpenAI key once).",
       id: "codex" as const,
     },
     {
