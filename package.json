@@ -1,0 +1,118 @@
+{
+  "name": "paritok-vscode",
+  "displayName": "Paritok",
+  "description": "Route your VS Code AI assistant (Continue / Cline) through a local Paritok proxy to compress tool-call & file context and cut token cost.",
+  "version": "0.1.0",
+  "publisher": "paritok",
+  "license": "MIT",
+  "icon": "images/paritok-icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Paritok-official/paritok-vscode"
+  },
+  "homepage": "https://paritok.com",
+  "bugs": {
+    "url": "https://github.com/Paritok-official/paritok-vscode/issues"
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Machine Learning",
+    "Other"
+  ],
+  "keywords": [
+    "paritok",
+    "compression",
+    "tokens",
+    "proxy",
+    "continue",
+    "cline",
+    "cost"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "paritok.enableProxyMode",
+        "title": "Paritok: Enable Proxy Mode",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "paritok.disableProxyMode",
+        "title": "Paritok: Disable Proxy Mode (restore config)",
+        "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "paritok.restartProxy",
+        "title": "Paritok: Restart Proxy",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "paritok.setApiKey",
+        "title": "Paritok: Set API Key",
+        "icon": "$(key)"
+      },
+      {
+        "command": "paritok.showStats",
+        "title": "Paritok: Show Savings (/stats)",
+        "icon": "$(graph)"
+      }
+    ],
+    "configuration": {
+      "title": "Paritok",
+      "properties": {
+        "paritok.host": {
+          "type": "string",
+          "default": "127.0.0.1",
+          "description": "Host the local proxy binds to."
+        },
+        "paritok.port": {
+          "type": "number",
+          "default": 8080,
+          "description": "Port the local proxy listens on. The AI assistant's base URL is pointed here."
+        },
+        "paritok.upstream": {
+          "type": "string",
+          "enum": [
+            "anthropic",
+            "openai"
+          ],
+          "default": "anthropic",
+          "description": "Which API surface your assistant uses. 'anthropic' wires base_url to http://host:port ; 'openai' wires it to http://host:port/v1."
+        },
+        "paritok.paritokCommand": {
+          "type": "string",
+          "default": "paritok",
+          "description": "The paritok CLI executable. Change if it is not on PATH (e.g. an absolute path to the venv's paritok)."
+        },
+        "paritok.autoStart": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically enable proxy mode when VS Code starts (requires an API key to already be set)."
+        },
+        "paritok.assistantConfigPath": {
+          "type": "string",
+          "default": "",
+          "description": "Override the path to the assistant's config.json (Continue: ~/.continue/config.json). Leave empty to auto-detect."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.80.0",
+    "typescript": "^5.0.0",
+    "@vscode/vsce": "^2.22.0"
+  }
+}
