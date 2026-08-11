@@ -157,10 +157,9 @@ const codex: Agent = {
   postEnableHint: "Run `codex` in a terminal — it now routes through the proxy.",
 
   async detect(): Promise<boolean> {
-    return (
-      fs.existsSync(path.join(os.homedir(), ".codex")) ||
-      (await runCheck("codex", ["--version"]))
-    );
+    // Require the actual Codex CLI — a bare ~/.codex dir is too weak a signal
+    // (other tools use that path) and we must not clobber an unrelated config.
+    return runCheck("codex", ["--version"]);
   },
 
   isWired(): boolean {

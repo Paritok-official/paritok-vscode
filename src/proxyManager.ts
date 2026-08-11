@@ -59,6 +59,13 @@ export class ProxyManager {
     if (this.running) {
       return;
     }
+    // If something is already serving /health on this port (e.g. a `paritok up`
+    // the user launched in a terminal), reuse it instead of spawning a second
+    // proxy that would fight for the port.
+    if (await this.pingHealth()) {
+      this.out.appendLine(`[reusing an existing proxy already on ${this.host}:${this.port}]`);
+      return;
+    }
     if (!(await this.checkInstalled())) {
       throw new Error(
         `The 'paritok' CLI was not found (tried '${this.command}'). ` +
@@ -90,6 +97,22 @@ export class ProxyManager {
     });
 
     await this.waitForHealth(30_000);
+  }
+
+  /** One-shot GET /health — true if something healthy already answers. */
+  private pingHealth(): Promise<boolean> {
+    const { host, port } = this;
+    return new Promise((resolve) => {
+      const req = http.get({ host, port, path: "/health", timeout: 1500 }, (res) => {
+        res.resume();
+        resolve(res.statusCode === 200);
+      });
+      req.on("error", () => resolve(false));
+      req.on("timeout", () => {
+        req.destroy();
+        resolve(false);
+      });
+    });
   }
 
   /** Poll GET /health until 200 or timeout. */

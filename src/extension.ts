@@ -111,20 +111,27 @@ async function enable() {
     }
     const selected: Agent[] = chosen.map((c) => agentById(c.id)!).filter(Boolean);
 
-    // 2) Gather inputs (keys/models), reusing stored secrets. Cancel aborts all.
+    // 2) Gather inputs (keys/models), reusing stored secrets. Cancelling ONE
+    //    agent skips only that agent — the others still get enabled.
     const collected = new Map<AgentId, any>();
+    const active: Agent[] = [];
     for (const a of selected) {
       const data = a.collect ? await a.collect(ctx) : {};
       if (data === undefined) {
-        vscode.window.showInformationMessage(`Paritok: cancelled while setting up ${a.label}.`);
-        return;
+        vscode.window.showWarningMessage(`Paritok: skipped ${a.label} (setup cancelled).`);
+        continue;
       }
       collected.set(a.id, data);
+      active.push(a);
+    }
+    if (active.length === 0) {
+      vscode.window.showInformationMessage("Paritok: nothing enabled.");
+      return;
     }
 
     // 3) Codex is wired by paritok itself → fold its options into paritok.yaml.
     let codexOpts: CodexOptions | undefined;
-    if (selected.some((a) => a.id === "codex")) {
+    if (active.some((a) => a.id === "codex")) {
       const d = collected.get("codex");
       codexOpts = { model: d.model, apiKey: d.apiKey };
     }
@@ -156,7 +163,7 @@ async function enable() {
           baseOpenAIv1: `http://${proxy.host}:${proxy.port}/v1`,
         };
         p.report({ message: "wiring agents…" });
-        for (const a of selected) {
+        for (const a of active) {
           if (!a.viaProxy) {
             await a.enable(ectx, collected.get(a.id));
           }
@@ -164,13 +171,13 @@ async function enable() {
       }
     );
 
-    await setEnabledIds(selected.map((a) => a.id));
+    await setEnabledIds(active.map((a) => a.id));
     render();
 
     // 6) Summary + per-agent next steps.
-    const hints = selected.map((a) => a.postEnableHint).filter(Boolean) as string[];
-    const names = selected.map((a) => a.label).join(", ");
-    const needReload = selected.some((a) => a.id === "continue");
+    const hints = active.map((a) => a.postEnableHint).filter(Boolean) as string[];
+    const names = active.map((a) => a.label).join(", ");
+    const needReload = active.some((a) => a.id === "continue");
     const msg = `Paritok routing: ${names} (proxy on ${proxy.host}:${proxy.port}).` +
       (hints.length ? "\n• " + hints.join("\n• ") : "");
     if (needReload) {

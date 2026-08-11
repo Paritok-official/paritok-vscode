@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.6
+
+- **Fix: cancelling one agent no longer aborts the whole Enable.** Skipping (e.g. dismissing Codex's key prompt) now skips only that agent; the others — including Claude Code — still get wired.
+- **Fix: safer Codex detection.** Codex is only auto-selected when the `codex` CLI is actually present, not merely because a `~/.codex` directory exists, so we never risk clobbering an unrelated config.
+- **Reuse an existing proxy.** If a `paritok up` is already serving on the port (e.g. one you started in a terminal), Enable reuses it instead of spawning a second, conflicting proxy.
+
 ## 0.1.5
 
 - **Multi-agent switch.** `Paritok: Enable` now offers a checklist of agents and wires the ones you pick, minimizing setup steps:
