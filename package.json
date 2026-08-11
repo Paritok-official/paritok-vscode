@@ -2,7 +2,7 @@
   "name": "paritok-vscode",
   "displayName": "Paritok",
   "description": "Route your VS Code AI assistant (Continue / Cline) through a local Paritok proxy to compress tool-call & file context and cut token cost.",
-  "version": "0.1.19",
+  "version": "0.1.20",
   "publisher": "Paritok",
   "license": "MIT",
   "icon": "images/paritok-icon.png",
@@ -127,7 +127,7 @@
         "paritok.autoStart": {
           "type": "boolean",
           "default": false,
-          "description": "Re-enable the previously chosen agents when VS Code starts (requires an API key and a prior Enable)."
+          "description": "Deprecated / no longer needed: enabled agents now always re-establish on launch (and their configs are auto-restored if the proxy can't start), so Codex/Continue never point at a dead proxy."
         },
         "paritok.assistantConfigPath": {
           "type": "string",

@@ -86,19 +86,47 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("paritok.openConfig", () => openConfig())
   );
 
-  // Re-establish after a window reload/restart. Claude Code is re-established
-  // regardless of autoStart (its routing is in-memory, lost on every reload, and
-  // the user expects the native panel to keep working); Codex/Continue only when
-  // autoStart is on. bringUp waits on /health, so if the proxy can't come up we
-  // simply never set the env — the native panel just direct-connects, unbroken.
-  const auto = vscode.workspace.getConfiguration("paritok").get<boolean>("autoStart", false);
+  // Re-establish (or heal) enabled agents after a reload/restart/crash. Codex and
+  // Continue write PERSISTENT configs pointing at the proxy, so if they're enabled
+  // the proxy MUST be running — otherwise their config is left pointing at a dead
+  // port (e.g. after a crash where deactivate never ran). So: if anything is
+  // enabled, bring the proxy up and re-wire; if that fails, RESTORE the configs so
+  // nothing dangles. (Claude Code is in-memory and always safe either way.)
   const key = await context.secrets.get(SECRET_KEY);
-  const ids = enabledIds();
-  if (key && ids.length && (auto || ids.includes("claude-code"))) {
-    bringUp(key)
-      .then(() => render())
-      .catch((e) => output.appendLine(`auto-start failed: ${e.message}`));
+  if (enabledIds().length) {
+    if (key) {
+      bringUp(key)
+        .then(() => render())
+        .catch(async (e) => {
+          output.appendLine(
+            `Paritok: proxy did not start (${e.message}); restoring agent configs so nothing points at a dead proxy.`
+          );
+          await healEnabledConfigs();
+          render();
+        });
+    } else {
+      // Enabled but no API key → the proxy can't run → restore persistent redirects.
+      await healEnabledConfigs();
+      render();
+    }
   }
+}
+
+/**
+ * Restore the config-wired agents (Codex's ~/.codex/config.toml, Continue's
+ * config) to their pre-Paritok state so a session that couldn't bring the proxy
+ * up never leaves them pointing at a dead port. Keeps the enabled selection, so
+ * the next launch that CAN start the proxy re-establishes them.
+ */
+async function healEnabledConfigs() {
+  for (const id of enabledIds()) {
+    try {
+      await agentById(id)?.disable();
+    } catch {
+      /* best-effort */
+    }
+  }
+  clearClaudeEnv();
 }
 
 export async function deactivate() {

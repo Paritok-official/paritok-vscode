@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.20
+
+- **Codex/Continue never get stranded on a dead proxy.** They write persistent configs pointing at the local proxy, so a crash or force-quit (where `deactivate` never runs) could leave them pointing at a dead port. Now, on every launch, if any agent is enabled the extension re-establishes the proxy — and if it can't start, it **restores** those configs so nothing dangles. A normal close still restores them via `deactivate`. (`paritok.autoStart` is now redundant and marked deprecated.)
+
 ## 0.1.19
 
 - **Slimmer Codex config.** The generated paritok.yaml codex block is now just `enabled: true` (plus `model` only if you pinned one via `paritok.codexModel`). No `subscription`/`api_key` — Codex uses its own login (subscription or key via `codex login`) and paritok relays it, exactly like Claude Code. The full "Create editable config" template drops those lines too. (Needs paritok ≥ 1.3.4, which defaults Codex auth to `requires_openai_auth`.)
