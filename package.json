@@ -4,7 +4,7 @@
   "description": "Route your VS Code AI assistant (Continue / Cline) through a local Paritok proxy to compress tool-call & file context and cut token cost.",
   "version": "0.1.21",
   "publisher": "Paritok",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "icon": "images/paritok-icon.png",
   "repository": {
     "type": "git",
