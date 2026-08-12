@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.21
+
+- **Backend readiness check before Enable — no more silent "why isn't it compressing?".** Enabling an agent now preflights the configured backend:
+  - **GPU server (`use_gpu_server: true`, the default):** if no Paritok API key is set, or the server rejects it (invalid/expired), you get a warning with **Set API Key** (instead of silently passing through uncompressed).
+  - **Local Ollama (`use_gpu_server: false`):** if Ollama isn't reachable, a warning offers to open the **Ollama download page**; if it's running but the `paritok-4b-v1` model isn't pulled, a **Pull Model** button runs `ollama pull paritok-4b-v1` in a terminal.
+- **Local Ollama needs no Paritok key.** When `use_gpu_server: false`, Enable no longer prompts for (or requires) a Paritok API key — the local model is keyless. GPU mode is unchanged.
+- (Reminder: Enable already offers to `pip install "paritok[proxy]"` for you when the CLI is missing — that's unchanged.)
+
 ## 0.1.20
 
 - **Codex/Continue never get stranded on a dead proxy.** They write persistent configs pointing at the local proxy, so a crash or force-quit (where `deactivate` never runs) could leave them pointing at a dead port. Now, on every launch, if any agent is enabled the extension re-establishes the proxy — and if it can't start, it **restores** those configs so nothing dangles. A normal close still restores them via `deactivate`. (`paritok.autoStart` is now redundant and marked deprecated.)

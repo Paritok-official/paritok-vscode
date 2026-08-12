@@ -10,6 +10,7 @@ import {
   scaffoldFullConfig,
 } from "./paritokConfig";
 import { offerInstall } from "./installer";
+import { OLLAMA_DOWNLOAD, ollamaModels, modelPresent, gpuKeyState } from "./backend";
 import {
   AGENTS,
   AgentId,
@@ -92,9 +93,9 @@ export async function activate(context: vscode.ExtensionContext) {
   // port (e.g. after a crash where deactivate never ran). So: if anything is
   // enabled, bring the proxy up and re-wire; if that fails, RESTORE the configs so
   // nothing dangles. (Claude Code is in-memory and always safe either way.)
-  const key = await context.secrets.get(SECRET_KEY);
+  const key = (await context.secrets.get(SECRET_KEY)) ?? "";
   if (enabledIds().length) {
-    if (key) {
+    if (key || proxyKeyOptional()) {
       bringUp(key)
         .then(() => render())
         .catch(async (e) => {
@@ -280,6 +281,104 @@ async function bringUp(key: string, p?: vscode.Progress<{ message?: string }>) {
   }
 }
 
+// ───────────────────────────── backend preflight ───────────────────────────
+/** True when the proxy can start with no Paritok key — self-hosted Ollama backend. */
+function proxyKeyOptional(): boolean {
+  if (configFileSetting()) {
+    return false; // user-owned config is opaque; keep requiring a key to be safe
+  }
+  return vscode.workspace.getConfiguration("paritok").get<boolean>("useGpuServer", true) === false;
+}
+
+/** The key to start the proxy with: prompt for GPU mode, optional (empty) for local Ollama.
+ *  Returns undefined only when the user cancelled the key prompt (caller aborts). */
+async function keyForBackend(): Promise<string | undefined> {
+  if (proxyKeyOptional()) {
+    return (await ctx.secrets.get(SECRET_KEY)) ?? ""; // local Ollama needs no Paritok key
+  }
+  return ensureKey();
+}
+
+/**
+ * Warn before enabling when the chosen backend isn't ready. Returns true to
+ * proceed, false to abort. A self-managed configFile is opaque (we don't parse
+ * it) so the check is skipped there.
+ *   - GPU server (use_gpu_server: true, the default): no key or a rejected key → warn.
+ *   - Local Ollama (use_gpu_server: false): Ollama unreachable → offer the download
+ *     page; the model not pulled → offer to pull it right away.
+ */
+async function preflightBackend(): Promise<boolean> {
+  if (configFileSetting()) {
+    return true;
+  }
+  const c = vscode.workspace.getConfiguration("paritok");
+
+  if (c.get<boolean>("useGpuServer", true)) {
+    const key = await ctx.secrets.get(SECRET_KEY);
+    if (!key) {
+      const pick = await vscode.window.showWarningMessage(
+        "Paritok: the GPU server backend (use_gpu_server: true) needs a Paritok API key. " +
+          "Set one, or switch to local Ollama (use_gpu_server: false).",
+        "Set API Key",
+        "Cancel"
+      );
+      return pick === "Set API Key" ? (await setApiKey()) !== undefined : false;
+    }
+    const base = c.get<string>("gpuServerBaseUrl", "https://www.paritok.com/api");
+    if ((await gpuKeyState(base, key)) === false) {
+      const pick = await vscode.window.showWarningMessage(
+        "Paritok: the GPU server rejected your API key (invalid or expired). " +
+          "Update it, or switch to local Ollama.",
+        "Set API Key",
+        "Enable Anyway",
+        "Cancel"
+      );
+      if (pick === "Set API Key") {
+        return (await setApiKey()) !== undefined;
+      }
+      return pick === "Enable Anyway";
+    }
+    return true; // valid, or couldn't determine (don't block on a network hiccup)
+  }
+
+  // Local Ollama backend.
+  const base = c.get<string>("localModelBaseUrl", "http://localhost:11434/v1");
+  const model = c.get<string>("localModelModel", "paritok-4b-v1");
+  const models = await ollamaModels(base);
+  if (models === null) {
+    const pick = await vscode.window.showWarningMessage(
+      `Paritok: local backend is on (use_gpu_server: false) but Ollama isn't reachable at ${base}. ` +
+        "Install Ollama and start it (`ollama serve`).",
+      "Install Ollama",
+      "Enable Anyway",
+      "Cancel"
+    );
+    if (pick === "Install Ollama") {
+      vscode.env.openExternal(vscode.Uri.parse(OLLAMA_DOWNLOAD));
+    }
+    return pick === "Enable Anyway";
+  }
+  if (!modelPresent(models, model)) {
+    const pick = await vscode.window.showWarningMessage(
+      `Paritok: Ollama is running but the model "${model}" isn't pulled yet.`,
+      "Pull Model",
+      "Enable Anyway",
+      "Cancel"
+    );
+    if (pick === "Pull Model") {
+      const term = vscode.window.createTerminal("Paritok: ollama pull");
+      term.show();
+      term.sendText(`ollama pull ${model}`);
+      vscode.window.showInformationMessage(
+        `Paritok: pulling "${model}" in a terminal — re-run Enable once it finishes.`
+      );
+      return false; // let the pull run; the user re-enables when it's done
+    }
+    return pick === "Enable Anyway";
+  }
+  return true;
+}
+
 // ─────────────────────────────── enable: menu ──────────────────────────────
 async function enableMenu() {
   const [ccDet, codexDet, contDet] = await Promise.all([
@@ -326,8 +425,11 @@ async function enableMenu() {
 // ─────────────────────────── enable: Claude Code ───────────────────────────
 async function enableClaudeCode() {
   try {
-    const key = await ensureKey();
-    if (!key) {
+    if (!(await preflightBackend())) {
+      return;
+    }
+    const key = await keyForBackend();
+    if (key === undefined) {
       return;
     }
     await addEnabled("claude-code");
@@ -360,8 +462,11 @@ async function enableClaudeCode() {
 // ─────────────────────────────── enable: Codex ─────────────────────────────
 async function enableCodex() {
   try {
-    const key = await ensureKey();
-    if (!key) {
+    if (!(await preflightBackend())) {
+      return;
+    }
+    const key = await keyForBackend();
+    if (key === undefined) {
       return;
     }
     // With a self-managed config the codex: block lives in the user's file, so
@@ -419,8 +524,11 @@ async function enableCodex() {
 // ────────────────────────────── enable: Continue ───────────────────────────
 async function enableContinue() {
   try {
-    const key = await ensureKey();
-    if (!key) {
+    if (!(await preflightBackend())) {
+      return;
+    }
+    const key = await keyForBackend();
+    if (key === undefined) {
       return;
     }
     const cont = agentById("continue")!;
