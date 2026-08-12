@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.22
+
+- **Docs & license.** Shortened the README to a short intro + per-agent quick start (Set API Key → Enable X), self-hosting via an editable config (`use_gpu_server: false`), and a **See your savings** note (`http://127.0.0.1:8080/stats`). Relicensed from MIT to **Apache-2.0**. No functional changes.
+
 ## 0.1.21
 
 - **Backend readiness check before Enable — no more silent "why isn't it compressing?".** Enabling an agent now preflights the configured backend:
