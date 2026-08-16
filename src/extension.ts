@@ -563,6 +563,7 @@ async function enableContinue() {
 // ───────────────────────────────── disable ─────────────────────────────────
 async function disable() {
   const ids = enabledIds();
+  const hadClaude = ids.includes("claude-code");
   for (const id of ids) {
     try {
       await agentById(id)?.disable();
@@ -574,6 +575,25 @@ async function disable() {
   proxy.stop();
   await setEnabledIds([]);
   render();
+
+  // A `claude` process spawned while routing was on captured ANTHROPIC_BASE_URL=<proxy>
+  // in its OWN process env at spawn time. We can't change an already-running child's
+  // environment, and the proxy is now stopped — so that live session would hit a dead
+  // port (ConnectionRefused). Clearing our env only affects FUTURE spawns; reloading the
+  // window respawns `claude` with the cleared env (enabledIds is now empty, so activate()
+  // won't re-set it). It's the only reliable way to fully disconnect an active session.
+  if (hadClaude) {
+    const choice = await vscode.window.showWarningMessage(
+      "Paritok disabled. Reload the window to fully disconnect Claude Code — a session already " +
+        "open still points at the stopped proxy until it restarts (you'd see 'Connection refused').",
+      "Reload Window"
+    );
+    if (choice === "Reload Window") {
+      await vscode.commands.executeCommand("workbench.action.reloadWindow");
+    }
+    return;
+  }
+
   vscode.window.showInformationMessage(
     ids.length
       ? `Paritok stopped; restored ${ids.length} agent config(s).`

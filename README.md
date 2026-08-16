@@ -31,7 +31,7 @@ While the proxy is running, open **http://127.0.0.1:8080/stats** in a browser (o
 
 ## Disable
 
-`Ctrl+Shift+P` → **`Paritok: Disable`** stops the proxy and restores every agent's original config.
+`Ctrl+Shift+P` → **`Paritok: Disable`** stops the proxy and restores every agent's original config. For **Claude Code**, **reload the window afterwards** (the prompt offers a one-click **Reload Window**) — a session that was already open keeps pointing at the now-stopped proxy until it restarts, so its next request would otherwise show `Connection refused`.
 
 ## Requirements
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.23
+
+- **Disable now offers a one-click Reload Window for Claude Code.** A `claude` session started while routing was on captured `ANTHROPIC_BASE_URL=<proxy>` in its own process env at spawn time — which the OS won't let us change after the fact. So after **Paritok: Disable** stops the proxy, that still-open session would hit the dead port on its next request (`Connection refused`). Disable now warns and offers **Reload Window**, which respawns `claude` with the routing cleared, fully disconnecting it. Mirrors the reload prompt Enable already shows.
+
 ## 0.1.22
 
 - **Docs & license.** Shortened the README to a short intro + per-agent quick start (Set API Key → Enable X), self-hosting via an editable config (`use_gpu_server: false`), and a **See your savings** note (`http://127.0.0.1:8080/stats`). Relicensed from MIT to **Apache-2.0**. No functional changes.
