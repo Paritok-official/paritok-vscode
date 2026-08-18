@@ -9,7 +9,7 @@ import {
   configFileSetting,
   scaffoldFullConfig,
 } from "./paritokConfig";
-import { offerInstall } from "./installer";
+import { offerInstall, isOutdated, offerUpgrade } from "./installer";
 import { OLLAMA_DOWNLOAD, ollamaModels, modelPresent, gpuKeyState } from "./backend";
 import {
   AGENTS,
@@ -230,6 +230,44 @@ async function startOrInstall(cfgPath: string, p?: vscode.Progress<{ message?: s
     } else {
       throw e;
     }
+  }
+  // The proxy is up (present CLI). Nudge an outdated install forward — fire and
+  // forget so the interactive prompt never blocks the enable flow.
+  void maybeOfferUpgrade();
+}
+
+// Whether we've already run the outdated-CLI check this session, so a user who
+// clicks "Later" isn't re-prompted on every restart/re-enable.
+let upgradeChecked = false;
+
+/**
+ * If the installed paritok CLI is older than the extension expects, offer a
+ * one-click pip upgrade, then a restart so the running proxy swaps to it. Runs at
+ * most once per session and never throws — a version check must not break enable.
+ */
+async function maybeOfferUpgrade(): Promise<void> {
+  if (upgradeChecked) {
+    return;
+  }
+  upgradeChecked = true;
+  try {
+    const version = await proxy.getVersion();
+    if (!version || !isOutdated(version)) {
+      return;
+    }
+    const upgraded = await offerUpgrade(output, version);
+    if (!upgraded) {
+      return;
+    }
+    const choice = await vscode.window.showInformationMessage(
+      "Paritok upgraded. Restart the proxy to run the new version.",
+      "Restart Paritok"
+    );
+    if (choice === "Restart Paritok") {
+      await vscode.commands.executeCommand("paritok.restart");
+    }
+  } catch {
+    /* best-effort — a version check must never break enable */
   }
 }
 

@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { ChildProcess } from "child_process";
 import * as http from "http";
-import { spawnCmd, runCheck, killTree, killByCommandLine } from "./proc";
+import { spawnCmd, runCheck, runCapture, killTree, killByCommandLine } from "./proc";
 
 // Every proxy the extension spawns is passed a --config-file inside this
 // globalStorage folder, so its command line uniquely contains this string.
@@ -55,6 +55,16 @@ export class ProxyManager {
   /** True if the paritok CLI is runnable (handles Windows .cmd launchers). */
   checkInstalled(): Promise<boolean> {
     return runCheck(this.command, ["--version"]);
+  }
+
+  /**
+   * The installed CLI's version (e.g. "1.3.8"), parsed from `paritok --version`
+   * (Click prints "paritok, version 1.3.8"). Null if it's missing or unparseable.
+   */
+  async getVersion(): Promise<string | null> {
+    const out = await runCapture(this.command, ["--version"]);
+    const m = out?.match(/(\d+\.\d+\.\d+)/);
+    return m ? m[1] : null;
   }
 
   /**

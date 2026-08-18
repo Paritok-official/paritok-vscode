@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.24
+
+- **Outdated-CLI check — old installs get nudged to the latest.** Once the proxy is up, if the installed `paritok` CLI is older than the extension expects (currently **1.3.8**, which adds the visual `/stats` dashboard and the latest fixes), Enable now offers a one-click `pip install --upgrade "paritok[proxy]"`, then a **Restart Paritok** so the running proxy swaps to the new version. Previously a present-but-old CLI was treated as "installed" and never upgraded — only *fresh* installs got the latest, so long-time users silently stayed behind. Runs at most once per session; clicking **Later** won't re-prompt.
+
 ## 0.1.23
 
 - **Disable now offers a one-click Reload Window for Claude Code.** A `claude` session started while routing was on captured `ANTHROPIC_BASE_URL=<proxy>` in its own process env at spawn time — which the OS won't let us change after the fact. So after **Paritok: Disable** stops the proxy, that still-open session would hit the dead port on its next request (`Connection refused`). Disable now warns and offers **Reload Window**, which respawns `claude` with the routing cleared, fully disconnecting it. Mirrors the reload prompt Enable already shows.

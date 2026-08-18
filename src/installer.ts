@@ -12,6 +12,38 @@ import { spawnCmd, runCheck } from "./proc";
 
 const PY_CANDIDATES = ["python", "python3", "py"];
 
+/**
+ * The oldest paritok CLI this extension is happy with. Below it, the extension
+ * offers a one-click `pip install --upgrade`. Bump this each release that adds a
+ * feature the extension surfaces (e.g. the 1.3.8 visual /stats dashboard) so
+ * users who already had an old CLI installed are nudged forward — a bare presence
+ * check ("paritok --version runs") would otherwise leave them on the old version.
+ */
+export const MIN_PARITOK_VERSION = "1.3.8";
+
+function parseVer(v: string): [number, number, number] | null {
+  const m = v.match(/(\d+)\.(\d+)\.(\d+)/);
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+}
+
+/** True if `installed` is strictly older than `min` (default MIN_PARITOK_VERSION). */
+export function isOutdated(installed: string, min: string = MIN_PARITOK_VERSION): boolean {
+  const a = parseVer(installed);
+  const b = parseVer(min);
+  if (!a || !b) {
+    return false; // unknown/unparseable → don't nag
+  }
+  for (let i = 0; i < 3; i++) {
+    if (a[i] < b[i]) {
+      return true;
+    }
+    if (a[i] > b[i]) {
+      return false;
+    }
+  }
+  return false;
+}
+
 /** Marketplace id of the Continue assistant this extension wires. */
 export const CONTINUE_EXT_ID = "Continue.continue";
 
@@ -118,6 +150,35 @@ export async function offerInstall(out: vscode.OutputChannel): Promise<boolean> 
 
   await vscode.window.withProgress(
     { location: vscode.ProgressLocation.Notification, title: "Paritok: installing CLI via pip…" },
+    () => pipInstall(python, out)
+  );
+  return true;
+}
+
+/**
+ * Non-modal upgrade flow: an old CLI is installed and runnable, but below
+ * MIN_PARITOK_VERSION. Offer a one-click `pip install --upgrade`. Returns true if
+ * the upgrade ran. Best-effort — declining just dismisses the toast.
+ */
+export async function offerUpgrade(out: vscode.OutputChannel, installed: string): Promise<boolean> {
+  const choice = await vscode.window.showWarningMessage(
+    `Paritok ${installed} is out of date — ${MIN_PARITOK_VERSION}+ adds the visual /stats ` +
+      `dashboard and the latest fixes. Upgrade now?`,
+    "Upgrade",
+    "Later"
+  );
+  if (choice !== "Upgrade") {
+    return false;
+  }
+  const python = await findPython();
+  if (!python) {
+    vscode.window.showErrorMessage(
+      'Python was not found — upgrade manually with:  pip install --upgrade "paritok[proxy]"'
+    );
+    return false;
+  }
+  await vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Notification, title: "Paritok: upgrading CLI via pip…" },
     () => pipInstall(python, out)
   );
   return true;

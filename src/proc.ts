@@ -38,6 +38,22 @@ export function runCheck(cmd: string, args: string[]): Promise<boolean> {
 }
 
 /**
+ * Run a command and capture its stdout+stderr. Resolves the combined text on
+ * exit 0, or null on spawn error / non-zero exit. Never rejects. Used to read
+ * `paritok --version` for the outdated-CLI check.
+ */
+export function runCapture(cmd: string, args: string[]): Promise<string | null> {
+  return new Promise((resolve) => {
+    let buf = "";
+    const child = spawnCmd(cmd, args, { stdio: ["ignore", "pipe", "pipe"] });
+    child.stdout?.on("data", (d) => (buf += d.toString()));
+    child.stderr?.on("data", (d) => (buf += d.toString()));
+    child.on("error", () => resolve(null));
+    child.on("exit", (code) => resolve(code === 0 ? buf : null));
+  });
+}
+
+/**
  * Kill a spawned process and its children. On Windows a shell-launched tree
  * (cmd.exe → paritok.cmd → python) is not fully killed by proc.kill(), so use
  * taskkill /T. IMPORTANT: this is SYNCHRONOUS (spawnSync). We used to fire an
